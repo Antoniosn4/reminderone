@@ -5,6 +5,7 @@
 
 import { AlertCircle, ArrowUp, Minus, ArrowDown, CheckCircle2 } from "lucide-react";
 import { TaskItem } from "../TaskList/TaskItem";
+import { EmptyState } from "../EmptyState";
 
 const PRIORITY_GROUPS = [
     { id: "urgent", title: "Urgente", icon: <AlertCircle className="w-4 h-4" />, colorClass: "text-red-400" },
@@ -42,10 +43,12 @@ export function PrioritiesView({ tasks, onEditTask, ...taskHandlers }) {
             })}
 
             {pendingTasks.length === 0 && (
-                <div className="text-center py-16 text-gray-500 flex flex-col items-center bg-gray-800/20 border border-dashed border-gray-700 rounded-2xl mt-8">
-                    <CheckCircle2 className="w-12 h-12 mb-4 opacity-20" />
-                    <h3 className="text-lg font-bold text-gray-400 mb-2">Tudo em dia!</h3>
-                    <p className="text-sm max-w-md">Nenhuma prioridade pendente no momento.</p>
+                <div className="bg-gray-800/20 border border-dashed border-gray-700 rounded-2xl mt-8">
+                    <EmptyState
+                        icon={CheckCircle2}
+                        title="Tudo em dia!"
+                        description="Nenhuma prioridade pendente no momento."
+                    />
                 </div>
             )}
         </div>

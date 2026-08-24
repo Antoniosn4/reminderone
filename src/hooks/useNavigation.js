@@ -7,7 +7,7 @@
 
 import { useState, useCallback } from "react";
 
-/** @typedef {'standard'|'calendar'|'settings'|'team'|'routine'|'priorities'} ViewType */
+/** @typedef {'standard'|'calendar'|'settings'|'routine'|'priorities'|'history'|'notes'|'kanban'} ViewType */
 
 /** Views fixas do sistema — não dependem de dados dinâmicos. */
 const STATIC_VIEWS = {
@@ -16,6 +16,9 @@ const STATIC_VIEWS = {
     ideias_produto: { title: "Ideias de Produto", type: "standard",   filter: "ideias_produto" },
     prioridades:    { title: "Prioridades",       type: "priorities" },
     calendario:     { title: "Calendário",        type: "calendar" },
+    historico:      { title: "Histórico",         type: "history" },
+    anotacoes:      { title: "Anotações",         type: "notes" },
+    kanban:         { title: "Kanban",            type: "kanban" },
     settings:       { title: "Configurações",     type: "settings" },
 };
 
@@ -49,13 +52,7 @@ function resolveViewConfig(view, projects, teams, routines) {
         }
     }
 
-    // 4. Equipes (ex: "team_marketing", "team_1234567890")
-    const team = teams.find((t) => t.id === view);
-    if (team) {
-        return { title: `Equipe: ${team.name}`, type: "team" };
-    }
-
-    // 5. Rotinas (ex: "routine_vitaminas", "routine_1234567890")
+    // 4. Rotinas (ex: "routine_vitaminas", "routine_1234567890")
     const routine = routines.find((r) => r.id === view);
     if (routine) {
         return { title: `Rotina: ${routine.label}`, type: "routine" };

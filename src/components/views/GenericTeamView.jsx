@@ -1,15 +1,51 @@
 // =============================================================
 //  GenericTeamView.jsx
-//  View genérica para equipes criadas dinamicamente pelo usuário.
+//  View unificada para TODAS as equipes (dinâmicas e legadas).
+//  Mostra tarefas reais atribuídas ao time via @mention.
 // =============================================================
 
-import { Users } from "lucide-react";
+import { useMemo } from "react";
+import { Users, CheckCircle2 } from "lucide-react";
+import { Avatar } from "../Avatar";
+import { TaskItem } from "../TaskList/TaskItem";
+import { EmptyState } from "../EmptyState";
 
-export function GenericTeamView({ team }) {
+const TEAM_AVATAR_SIZE_PX = 40;
+const MAX_VISIBLE_TEAM_AVATARS = 5;
+
+/**
+ * @param {{
+ *   team: object,
+ *   tasks?: Array,
+ *   onToggleTask?: Function,
+ *   onUpdateTask?: Function,
+ *   onDeleteTask?: Function,
+ *   onGenerateSubtasks?: Function,
+ *   onToggleSubtask?: Function,
+ *   onEditTask?: Function,
+ * }} props
+ */
+export function GenericTeamView({ team, tasks = [], ...taskHandlers }) {
     if (!team) return null;
+
+    const visibleAvatarCount = Math.min(team.members, MAX_VISIBLE_TEAM_AVATARS);
+
+    // Filtra tarefas atribuídas a este time (por assignee contendo nome do time)
+    const teamTasks = useMemo(() => {
+        const teamName = team.name?.toLowerCase() || "";
+        return tasks.filter((t) => {
+            const assignee = (t.assignee || "").toLowerCase();
+            const project = (t.project || "").toLowerCase();
+            return assignee.includes(teamName) || project.includes(teamName);
+        });
+    }, [tasks, team.name]);
+
+    const pendingTasks = useMemo(() => teamTasks.filter((t) => !t.completed), [teamTasks]);
+    const completedCount = teamTasks.length - pendingTasks.length;
 
     return (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4">
+            {/* Header da equipe */}
             <div className="bg-gray-800 border border-gray-700 rounded-2xl p-6 shadow-xl flex items-center justify-between">
                 <div className="flex items-center gap-6">
                     <div className="p-3 bg-gray-700/50 rounded-xl border border-gray-600/50">
@@ -20,26 +56,72 @@ export function GenericTeamView({ team }) {
                         <p className="text-sm text-gray-400 mt-1">{team.members} membros no espaço</p>
                     </div>
                 </div>
-                <div className="flex items-center -space-x-3">
-                    {[...Array(Math.min(team.members, 5))].map((_, i) => (
-                        <div key={i} className="w-10 h-10 rounded-full border-2 border-gray-800 bg-gray-900 overflow-hidden shadow-sm">
-                            <img
-                                src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${team.name}${i}&backgroundColor=transparent`}
-                                className="w-full h-full opacity-90"
-                                alt="Avatar"
-                            />
+
+                <div className="flex items-center gap-6">
+                    {/* Métricas reais */}
+                    <div className="flex gap-4">
+                        <div className="text-center">
+                            <span className="block text-2xl font-bold text-gray-100">{pendingTasks.length}</span>
+                            <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Pendentes</span>
                         </div>
-                    ))}
+                        <div className="text-center">
+                            <span className="block text-2xl font-bold text-emerald-400">{completedCount}</span>
+                            <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Concluídas</span>
+                        </div>
+                    </div>
+
+                    {/* Avatares */}
+                    <div className="flex items-center -space-x-3">
+                        {Array.from({ length: visibleAvatarCount }).map((_, i) => (
+                            <Avatar
+                                key={i}
+                                seed={`${team.name}-${i}`}
+                                size={TEAM_AVATAR_SIZE_PX}
+                                className="border-2 border-gray-800"
+                            />
+                        ))}
+                    </div>
                 </div>
             </div>
 
-            <div className="text-center py-16 text-gray-500 flex flex-col items-center bg-gray-800/20 border border-dashed border-gray-700 rounded-2xl">
-                <Users className="w-12 h-12 mb-4 opacity-20" />
-                <h3 className="text-lg font-bold text-gray-400 mb-2">Espaço configurado com sucesso</h3>
-                <p className="text-sm max-w-md">
-                    O ambiente para <strong>{team.name}</strong> está pronto. Comece a delegar tarefas com @menções para visualizar aqui.
-                </p>
-            </div>
+            {/* Lista de tarefas pendentes */}
+            {pendingTasks.length > 0 && (
+                <div>
+                    <h3 className="text-sm font-semibold text-gray-400 mb-4 px-1">
+                        Tarefas pendentes
+                    </h3>
+                    <div className="space-y-3">
+                        {pendingTasks.map((task) => (
+                            <TaskItem key={task.id} task={task} {...taskHandlers} />
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {/* Empty state quando não há tarefas */}
+            {teamTasks.length === 0 && (
+                <div className="bg-gray-800/20 border border-dashed border-gray-700 rounded-2xl">
+                    <EmptyState
+                        icon={Users}
+                        title="Espaço configurado com sucesso"
+                        description={`O ambiente para ${team.name} está pronto. Delegue tarefas com @menções ou atribua o projeto "${team.name}" para visualizar aqui.`}
+                    />
+                </div>
+            )}
+
+            {/* Tarefas concluídas */}
+            {completedCount > 0 && (
+                <div className="mt-6">
+                    <h3 className="text-sm font-semibold text-gray-500 border-b border-gray-800 pb-2 mb-4">
+                        Concluídas ({completedCount})
+                    </h3>
+                    <div className="space-y-3 opacity-60 hover:opacity-100 transition-opacity duration-500">
+                        {teamTasks.filter((t) => t.completed).map((task) => (
+                            <TaskItem key={task.id} task={task} {...taskHandlers} />
+                        ))}
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

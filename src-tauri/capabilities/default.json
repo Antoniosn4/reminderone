@@ -1,0 +1,12 @@
+{
+  "identifier": "default",
+  "description": "Permissões da janela principal (shell, bandeja, atalhos, notificações, updater).",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "shell:allow-open",
+    "notification:default",
+    "global-shortcut:default",
+    "updater:default"
+  ]
+}

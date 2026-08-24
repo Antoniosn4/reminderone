@@ -19,7 +19,7 @@ export function SidebarSectionTitle({ title, onAdd }) {
             </h4>
             {onAdd && (
                 <div className="p-1 hover:bg-gray-700 rounded-md opacity-0 group-hover:opacity-100 transition-all">
-                    <Plus className="w-4 h-4 text-gray-400 hover:text-violet-400" />
+                    <Plus className="w-4 h-4 text-gray-400 hover:text-gray-200" />
                 </div>
             )}
         </div>

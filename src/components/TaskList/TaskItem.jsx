@@ -23,6 +23,9 @@ import {
     AlertCircle,
 } from "lucide-react";
 import { SubtaskList } from "./SubtaskList";
+import { Avatar } from "../Avatar";
+
+const ASSIGNEE_AVATAR_SIZE_PX = 14;
 
 const PRIORITY_ICONS = {
     low:    { icon: ArrowDown,    color: "text-blue-400",    bg: "bg-blue-500/10", border: "border-blue-500/20" },
@@ -136,7 +139,7 @@ export function TaskItem({
                     ${task.completed
                         ? "bg-gray-900/50 border-gray-800/50 scale-[0.98] opacity-70"
                         : isEditing
-                            ? "bg-gray-800 border-violet-500/50 shadow-lg shadow-violet-500/10"
+                            ? "bg-gray-800 border-gray-600 shadow-lg shadow-black/10"
                             : "bg-gray-800 border-gray-700 hover:border-gray-500 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/20"
                     }`}
             >
@@ -147,7 +150,7 @@ export function TaskItem({
                         className={`relative flex-shrink-0 flex items-center justify-center transition-all duration-300 active:scale-90
                             ${task.completed
                                 ? "text-emerald-500 scale-110"
-                                : "text-gray-500 hover:text-violet-400 hover:scale-110"
+                                : "text-gray-500 hover:text-indigo-400 hover:scale-110"
                             }`}
                     >
                         {task.completed ? (
@@ -192,7 +195,7 @@ export function TaskItem({
                                 {task.date && task.date !== new Date().toISOString().split("T")[0] && (
                                     <span
                                         className={`text-[11px] font-medium px-2 py-0.5 rounded-md bg-gray-900 border transition-colors duration-300
-                                            ${task.completed ? "border-gray-800 text-gray-600" : "border-violet-500/20 text-violet-400"}`}
+                                            ${task.completed ? "border-gray-800 text-gray-600" : "border-sky-500/20 text-sky-400"}`}
                                     >
                                         📅 {new Date(task.date + "T12:00:00").toLocaleDateString("pt-BR", { day: "numeric", month: "short" })}
                                     </span>
@@ -202,11 +205,7 @@ export function TaskItem({
                                         className="flex items-center gap-1 bg-gray-900/80 border border-gray-700 px-1.5 py-0.5 rounded-md"
                                         title={`Atribuído a ${task.assignee.name}`}
                                     >
-                                        <img
-                                            src={task.assignee.avatar}
-                                            className="w-3.5 h-3.5 rounded-full"
-                                            alt={task.assignee.name}
-                                        />
+                                        <Avatar name={task.assignee.name} size={ASSIGNEE_AVATAR_SIZE_PX} />
                                         <span className="text-[9px] text-gray-400 font-medium">
                                             {task.assignee.name}
                                         </span>
@@ -217,7 +216,7 @@ export function TaskItem({
                                         className={`flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-md border transition-colors duration-300
                                             ${task.completed
                                                 ? "text-gray-500 bg-gray-800 border-gray-700"
-                                                : "text-violet-400 bg-violet-500/10 border-violet-500/20"}`}
+                                                : "text-sky-400 bg-sky-500/10 border-sky-500/20"}`}
                                     >
                                         <Sparkles className="w-3 h-3" />
                                         {completedSubtasksCount}/{task.subtasks.length}
@@ -245,7 +244,7 @@ export function TaskItem({
                                 onChange={(e) => setEditTitle(e.target.value)}
                                 onKeyDown={handleEditKeyDown}
                                 placeholder="Título da tarefa"
-                                className="w-full bg-gray-900 border border-violet-500/40 rounded-lg px-3 py-1.5 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-violet-400"
+                                className="w-full bg-gray-900 border border-gray-600 rounded-lg px-3 py-1.5 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-gray-400"
                             />
                             <div className="flex gap-2">
                                 <input
@@ -253,14 +252,14 @@ export function TaskItem({
                                     onChange={(e) => setEditProject(e.target.value)}
                                     onKeyDown={handleEditKeyDown}
                                     placeholder="Projeto"
-                                    className="flex-1 bg-gray-900 border border-gray-700 rounded-lg px-3 py-1 text-xs text-gray-300 placeholder-gray-500 focus:outline-none focus:border-violet-500/50"
+                                    className="flex-1 bg-gray-900 border border-gray-700 rounded-lg px-3 py-1 text-xs text-gray-300 placeholder-gray-500 focus:outline-none focus:border-gray-500/50"
                                 />
                                 <input
                                     value={editTime}
                                     onChange={(e) => setEditTime(e.target.value)}
                                     onKeyDown={handleEditKeyDown}
                                     placeholder="Horário"
-                                    className="w-24 bg-gray-900 border border-gray-700 rounded-lg px-3 py-1 text-xs text-gray-300 placeholder-gray-500 focus:outline-none focus:border-violet-500/50"
+                                    className="w-24 bg-gray-900 border border-gray-700 rounded-lg px-3 py-1 text-xs text-gray-300 placeholder-gray-500 focus:outline-none focus:border-gray-500/50"
                                 />
                             </div>
                         </div>
@@ -294,7 +293,7 @@ export function TaskItem({
                                 <button
                                     onClick={handleGenerateSubtasks}
                                     title="✨ Quebrar em passos com IA"
-                                    className="flex items-center gap-1 text-xs font-medium text-violet-400 hover:bg-violet-500/10 px-2 py-1.5 rounded-lg transition-colors"
+                                    className="flex items-center gap-1 text-xs font-medium text-sky-400 hover:bg-sky-500/10 px-2 py-1.5 rounded-lg transition-colors"
                                 >
                                     {isGeneratingSubtasks ? (
                                         <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -307,7 +306,7 @@ export function TaskItem({
                                 <button
                                     onClick={handleEditStart}
                                     title="Editar tarefa"
-                                    className="p-1.5 text-gray-500 hover:text-violet-400 hover:bg-violet-500/10 rounded-lg transition-colors"
+                                    className="p-1.5 text-gray-500 hover:text-gray-300 hover:bg-gray-700 rounded-lg transition-colors"
                                 >
                                     <Pencil className="w-3.5 h-3.5" />
                                 </button>

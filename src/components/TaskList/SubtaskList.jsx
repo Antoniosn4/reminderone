@@ -16,7 +16,7 @@ export function SubtaskList({ isLoading, subtasks, onToggleSubtask }) {
     return (
         <div className="ml-12 mr-4 p-4 rounded-xl bg-gray-800/50 border border-gray-700">
             {isLoading ? (
-                <div className="flex items-center gap-3 text-sm text-violet-400 font-medium">
+                <div className="flex items-center gap-3 text-sm text-sky-400 font-medium">
                     <Loader2 className="w-4 h-4 animate-spin" />
                     ✨ A IA está criando os passos...
                 </div>
@@ -33,7 +33,7 @@ export function SubtaskList({ isLoading, subtasks, onToggleSubtask }) {
                                 className={`transition-all duration-300 active:scale-90
                                     ${subtask.completed
                                         ? "text-emerald-500 scale-110"
-                                        : "text-gray-500 hover:text-violet-400 hover:scale-110"
+                                        : "text-gray-500 hover:text-gray-200 hover:scale-110"
                                     }`}
                             >
                                 {subtask.completed ? (

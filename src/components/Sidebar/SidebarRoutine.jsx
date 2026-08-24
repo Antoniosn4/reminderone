@@ -22,7 +22,7 @@ export function SidebarRoutine({ icon, label, time, streak = 0, aiAdjusted = fal
         <div
             onClick={onClick}
             className={`flex items-center justify-between px-3 py-1.5 rounded-lg cursor-pointer transition-colors ${active
-                    ? "bg-gray-700 text-white shadow-sm"
+                    ? "bg-gray-700 text-gray-100 shadow-sm"
                     : "hover:bg-gray-700/50 text-gray-400 hover:text-gray-200"
                 }`}
         >

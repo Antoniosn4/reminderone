@@ -2,7 +2,131 @@
 @tailwind components;
 @tailwind utilities;
 
-/* CSS global minimamente configurado */
-html, body, #root {
-  height: 100%;
+/* ============================================================
+   Design tokens — 3 temas via CSS custom properties.
+   O Tailwind resolve bg-gray-*, text-gray-* etc. via estas
+   variáveis, fazendo com que TODOS os componentes existentes
+   respeitem o tema sem edição de classes.
+   ============================================================ */
+
+/* ── Tema Escuro (padrão) — preto profundo ── */
+:root,
+:root[data-theme="dark"] {
+    --gray-50:  245 245 245;
+    --gray-100: 228 228 231;
+    --gray-200: 212 212 216;
+    --gray-300: 180 180 188;
+    --gray-400: 140 140 150;
+    --gray-500: 100 100 112;
+    --gray-600: 63 63 70;
+    --gray-700: 39 39 42;
+    --gray-800: 24 24 27;
+    --gray-900: 9 9 11;
+    --gray-950: 0 0 0;
+    --text-on-surface: 245 245 245;
+}
+
+/* ── Tema Azul (slate) ── */
+:root[data-theme="blue"] {
+    --gray-50:  248 250 252;
+    --gray-100: 241 245 249;
+    --gray-200: 226 232 240;
+    --gray-300: 203 213 225;
+    --gray-400: 148 163 184;
+    --gray-500: 100 116 139;
+    --gray-600: 71 85 105;
+    --gray-700: 51 65 85;
+    --gray-800: 30 41 59;
+    --gray-900: 15 23 42;
+    --gray-950: 2 6 23;
+    --text-on-surface: 241 245 249;
+}
+
+/* ── Tema Claro ── */
+:root[data-theme="light"] {
+    --gray-50:  24 24 27;
+    --gray-100: 39 39 42;
+    --gray-200: 63 63 70;
+    --gray-300: 82 82 91;
+    --gray-400: 113 113 122;
+    --gray-500: 140 140 150;
+    --gray-600: 200 200 206;
+    --gray-700: 228 228 232;
+    --gray-800: 241 241 243;
+    --gray-900: 250 250 252;
+    --gray-950: 255 255 255;
+    --text-on-surface: 24 24 27;
+}
+
+html,
+body,
+#root {
+    height: 100%;
+}
+
+/* Animação de entrada para telas modais — usada no VaultLayout. */
+@keyframes vault-fade-in-up {
+    from {
+        opacity: 0;
+        transform: translateY(16px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.animate-vault-in {
+    animation: vault-fade-in-up 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Shake horizontal para feedback de PIN incorreto. */
+@keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    15% { transform: translateX(-8px); }
+    30% { transform: translateX(8px); }
+    45% { transform: translateX(-6px); }
+    60% { transform: translateX(6px); }
+    75% { transform: translateX(-3px); }
+    90% { transform: translateX(3px); }
+}
+
+.animate-shake {
+    animation: shake 0.5s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+}
+
+/* Trunca conteúdo de anotações a 4 linhas visíveis. */
+.note-clamp {
+    display: -webkit-box;
+    -webkit-line-clamp: 4;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+/* Scrollbar personalizada — segue tema */
+.custom-scrollbar::-webkit-scrollbar { width: 6px; }
+.custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+.custom-scrollbar::-webkit-scrollbar-thumb { background-color: rgb(var(--gray-600)); border-radius: 10px; }
+.custom-scrollbar::-webkit-scrollbar-thumb:hover { background-color: rgb(var(--gray-500)); }
+.hide-scrollbar::-webkit-scrollbar { display: none; }
+
+/* BlockNote editor overrides — integração com tema dark/glassmorphism */
+.note-editor-wrapper .bn-editor {
+    background: transparent;
+    color: rgb(var(--gray-200));
+    padding: 0 0.5rem;
+}
+.note-editor-wrapper .bn-block-group .bn-block-outer {
+    margin-left: 0;
+}
+.note-editor-wrapper .bn-side-menu {
+    opacity: 0.5;
+}
+.note-editor-wrapper .bn-side-menu:hover {
+    opacity: 1;
+}
+.note-editor-wrapper [data-content-type="paragraph"] [data-placeholder]::before {
+    color: rgb(var(--gray-600));
+    font-style: italic;
 }

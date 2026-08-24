@@ -1,15 +1,15 @@
 // =============================================================
 //  useProjects.js
 //  Custom Hook — Gerenciamento CRUD de projetos com sub-projetos.
-//  Persistência via localStorage.
-//  Seed automático com projetos padrão quando vazio.
+//  Persistência via localStorage criptografado (AES-GCM).
 // =============================================================
 
-import { useState, useCallback, useEffect } from "react";
+import { useCallback } from "react";
+import { usePersistedState } from "./usePersistedState";
+import { generateId } from "../utils/id";
 
-const STORAGE_KEY = "reminder-custom-projects";
+const STORAGE_KEY = "reminder-custom-projects-encrypted";
 
-/** Projetos padrão — seed inicial quando localStorage está vazio. */
 const DEFAULT_PROJECTS = [
     {
         id: "frontend",
@@ -40,70 +40,120 @@ const DEFAULT_PROJECTS = [
     },
 ];
 
-/** Paleta de cores premium harmonizadas para novos projetos. */
 const PROJECT_COLORS = [
     "#3b82f6", "#8b5cf6", "#ec4899", "#f97316",
     "#10b981", "#eab308", "#ef4444", "#06b6d4",
 ];
 
-function loadProjects() {
-    try {
-        const raw = localStorage.getItem(STORAGE_KEY);
-        if (!raw) return DEFAULT_PROJECTS;
-        const parsed = JSON.parse(raw);
-        return parsed.length > 0 ? parsed : DEFAULT_PROJECTS;
-    } catch {
-        return DEFAULT_PROJECTS;
-    }
+function slugify(label) {
+    return label.toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "");
 }
 
-function persistProjects(projects) {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(projects));
+function makeProjectId(label) {
+    return `${slugify(label) || "proj"}_${generateId()}`;
 }
 
-/**
- * @returns {{
- *   projects: Array<{ id: string, label: string, color: string, subProjects: Array }>,
- *   addProject: (proj: { label: string, color: string }) => void,
- *   updateProject: (id: string, updates: object) => void,
- *   removeProject: (id: string) => void,
- * }}
- */
+function makeSubProjectId(parentId, label) {
+    return `${parentId}__${slugify(label) || "sub"}_${generateId()}`;
+}
+
+function hasDuplicateLabel(items, label, ignoreId = null) {
+    const target = label.toLowerCase();
+    return items.some(
+        (item) => item.id !== ignoreId && item.label.toLowerCase() === target,
+    );
+}
+
 export function useProjects() {
-    const [projects, setProjects] = useState(loadProjects);
-
-    // Persiste sempre que a lista muda
-    useEffect(() => {
-        persistProjects(projects);
-    }, [projects]);
+    const [projects, setProjects] = usePersistedState(STORAGE_KEY, DEFAULT_PROJECTS);
 
     const addProject = useCallback((proj) => {
-        if (!proj?.label?.trim()) return;
-        const trimmed = proj.label.trim();
+        const trimmed = proj?.label?.trim();
+        if (!trimmed) return;
         setProjects((prev) => {
-            if (prev.some((p) => p.label.toLowerCase() === trimmed.toLowerCase())) return prev;
+            if (hasDuplicateLabel(prev, trimmed)) return prev;
             const color = proj.color || PROJECT_COLORS[prev.length % PROJECT_COLORS.length];
             return [
                 ...prev,
                 {
-                    id: trimmed.toLowerCase().replace(/\s+/g, "_") + "_" + Date.now(),
+                    id: makeProjectId(trimmed),
                     label: trimmed,
                     color,
                     subProjects: [],
                 },
             ];
         });
-    }, []);
+    }, [setProjects]);
 
     const updateProject = useCallback((id, updates) => {
         setProjects((prev) =>
-            prev.map((p) => (p.id === id ? { ...p, ...updates } : p))
+            prev.map((p) => (p.id === id ? { ...p, ...updates } : p)),
         );
-    }, []);
+    }, [setProjects]);
 
     const removeProject = useCallback((id) => {
         setProjects((prev) => prev.filter((p) => p.id !== id));
-    }, []);
+    }, [setProjects]);
 
-    return { projects, addProject, updateProject, removeProject };
+    const addSubProject = useCallback((projectId, label) => {
+        const trimmed = label?.trim();
+        if (!trimmed) return;
+        setProjects((prev) =>
+            prev.map((project) => {
+                if (project.id !== projectId) return project;
+                const subs = project.subProjects ?? [];
+                if (hasDuplicateLabel(subs, trimmed)) return project;
+                return {
+                    ...project,
+                    subProjects: [
+                        ...subs,
+                        { id: makeSubProjectId(project.id, trimmed), label: trimmed },
+                    ],
+                };
+            }),
+        );
+    }, [setProjects]);
+
+    const updateSubProject = useCallback((projectId, subId, updates) => {
+        const trimmed = updates?.label?.trim();
+        if (!trimmed) return;
+        setProjects((prev) =>
+            prev.map((project) => {
+                if (project.id !== projectId) return project;
+                const subs = project.subProjects ?? [];
+                if (hasDuplicateLabel(subs, trimmed, subId)) return project;
+                return {
+                    ...project,
+                    subProjects: subs.map((sub) =>
+                        sub.id === subId ? { ...sub, ...updates, label: trimmed } : sub,
+                    ),
+                };
+            }),
+        );
+    }, [setProjects]);
+
+    const removeSubProject = useCallback((projectId, subId) => {
+        setProjects((prev) =>
+            prev.map((project) =>
+                project.id === projectId
+                    ? {
+                          ...project,
+                          subProjects: (project.subProjects ?? []).filter(
+                              (sub) => sub.id !== subId,
+                          ),
+                      }
+                    : project,
+            ),
+        );
+    }, [setProjects]);
+
+    return {
+        projects,
+        addProject,
+        updateProject,
+        removeProject,
+        addSubProject,
+        updateSubProject,
+        removeSubProject,
+    };
 }

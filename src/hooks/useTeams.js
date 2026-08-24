@@ -1,71 +1,46 @@
 // =============================================================
 //  useTeams.js
-//  Custom Hook — Gerenciamento CRUD de equipes.
-//  Persistência via localStorage.
+//  Custom Hook — CRUD de equipes.
+//  Persistência via localStorage criptografado.
 // =============================================================
 
-import { useState, useCallback, useEffect } from "react";
+import { useCallback } from "react";
+import { usePersistedState } from "./usePersistedState";
+import { generateId } from "../utils/id";
 
-const STORAGE_KEY = "reminder-teams";
+const STORAGE_KEY = "reminder-teams-encrypted";
+const DEFAULT_MEMBERS = 2;
 
-/** Equipes padrão — seed inicial. */
 const DEFAULT_TEAMS = [
     { id: "team_marketing", name: "Marketing Q4", members: 4 },
     { id: "team_design", name: "Design System", members: 2 },
     { id: "team_dev", name: "Desenvolvimento", members: 6 },
 ];
 
-function loadTeams() {
-    try {
-        const raw = localStorage.getItem(STORAGE_KEY);
-        if (!raw) return DEFAULT_TEAMS;
-        const parsed = JSON.parse(raw);
-        return parsed.length > 0 ? parsed : DEFAULT_TEAMS;
-    } catch {
-        return DEFAULT_TEAMS;
-    }
-}
-
-function persistTeams(teams) {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(teams));
-}
-
-/**
- * @returns {{
- *   teams: Array<{ id: string, name: string, members: number }>,
- *   addTeam: (team: { name: string, members: number }) => void,
- *   updateTeam: (id: string, updates: object) => void,
- *   deleteTeam: (id: string) => void,
- * }}
- */
 export function useTeams() {
-    const [teams, setTeams] = useState(loadTeams);
-
-    useEffect(() => {
-        persistTeams(teams);
-    }, [teams]);
+    const [teams, setTeams] = usePersistedState(STORAGE_KEY, DEFAULT_TEAMS);
 
     const addTeam = useCallback((team) => {
         if (!team?.name?.trim()) return;
         setTeams((prev) => [
             ...prev,
             {
-                id: "team_" + Date.now(),
+                id: `team_${generateId()}`,
                 name: team.name.trim(),
-                members: Number(team.members) || 2,
+                members: Number(team.members) || DEFAULT_MEMBERS,
             },
         ]);
-    }, []);
+    }, [setTeams]);
 
     const updateTeam = useCallback((id, updates) => {
         setTeams((prev) =>
             prev.map((t) => (t.id === id ? { ...t, ...updates } : t))
         );
-    }, []);
+    }, [setTeams]);
 
     const deleteTeam = useCallback((id) => {
         setTeams((prev) => prev.filter((t) => t.id !== id));
-    }, []);
+    }, [setTeams]);
 
     return { teams, addTeam, updateTeam, deleteTeam };
 }

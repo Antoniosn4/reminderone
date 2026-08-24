@@ -60,7 +60,7 @@ export function TaskEditModal({ task, onClose, onSave, onDelete, projects = [], 
     };
 
     return (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
+        <div className="fixed inset-0 bg-black/60 z-[80] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
             <div
                 className="bg-gray-800 border border-gray-700 rounded-3xl w-full max-w-xl shadow-2xl overflow-hidden shadow-black/50"
                 onClick={(e) => e.stopPropagation()}
@@ -68,7 +68,7 @@ export function TaskEditModal({ task, onClose, onSave, onDelete, projects = [], 
                 {/* Header */}
                 <div className="flex items-center justify-between p-6 border-b border-gray-700 bg-gray-800/80">
                     <h2 className="text-lg font-bold text-gray-100 flex items-center gap-2">
-                        <Settings className="w-5 h-5 text-violet-400" /> Detalhes da Tarefa
+                        <Settings className="w-5 h-5 text-gray-400" /> Detalhes da Tarefa
                     </h2>
                     <button onClick={onClose} className="text-gray-500 hover:text-gray-300 transition-colors p-1.5 rounded-lg hover:bg-gray-700">
                         <X className="w-5 h-5" />
@@ -86,7 +86,7 @@ export function TaskEditModal({ task, onClose, onSave, onDelete, projects = [], 
                             type="text"
                             value={editedTask.title || ""}
                             onChange={(e) => handleChange("title", e.target.value)}
-                            className="w-full bg-gray-900 border border-gray-700 text-gray-100 rounded-xl px-4 py-3 text-base focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500 transition-all shadow-inner"
+                            className="w-full bg-gray-900 border border-gray-700 text-gray-100 rounded-xl px-4 py-3 text-base focus:outline-none focus:border-gray-500 focus:ring-1 focus:ring-gray-500/40 transition-all shadow-inner"
                             placeholder="Ex: Preparar relatório mensal..."
                         />
                     </div>
@@ -96,25 +96,25 @@ export function TaskEditModal({ task, onClose, onSave, onDelete, projects = [], 
                         <div>
                             <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-2">Data</label>
                             <div className="relative group">
-                                <Calendar className="w-4 h-4 text-gray-500 absolute left-3.5 top-1/2 -translate-y-1/2 group-focus-within:text-violet-400 transition-colors" />
+                                <Calendar className="w-4 h-4 text-gray-500 absolute left-3.5 top-1/2 -translate-y-1/2 group-focus-within:text-gray-300 transition-colors" />
                                 <input
                                     type="date"
                                     value={editedTask.date || ""}
                                     onChange={(e) => handleChange("date", e.target.value)}
-                                    className="w-full bg-gray-900 border border-gray-700 text-gray-100 rounded-xl pl-10 pr-3 py-3 text-sm focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500 transition-all shadow-inner [color-scheme:dark]"
+                                    className="w-full bg-gray-900 border border-gray-700 text-gray-100 rounded-xl pl-10 pr-3 py-3 text-sm focus:outline-none focus:border-gray-500 focus:ring-1 focus:ring-gray-500/40 transition-all shadow-inner [color-scheme:dark]"
                                 />
                             </div>
                         </div>
                         <div>
                             <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-2">Horário</label>
                             <div className="relative group">
-                                <Clock className="w-4 h-4 text-gray-500 absolute left-3.5 top-1/2 -translate-y-1/2 group-focus-within:text-violet-400 transition-colors" />
+                                <Clock className="w-4 h-4 text-gray-500 absolute left-3.5 top-1/2 -translate-y-1/2 group-focus-within:text-gray-300 transition-colors" />
                                 <input
                                     type="text"
                                     placeholder="Ex: 14:30 ou Sem hora"
                                     value={editedTask.time || ""}
                                     onChange={(e) => handleChange("time", e.target.value)}
-                                    className="w-full bg-gray-900 border border-gray-700 text-gray-100 rounded-xl pl-10 pr-3 py-3 text-sm focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500 transition-all shadow-inner"
+                                    className="w-full bg-gray-900 border border-gray-700 text-gray-100 rounded-xl pl-10 pr-3 py-3 text-sm focus:outline-none focus:border-gray-500 focus:ring-1 focus:ring-gray-500/40 transition-all shadow-inner"
                                 />
                             </div>
                         </div>
@@ -152,11 +152,11 @@ export function TaskEditModal({ task, onClose, onSave, onDelete, projects = [], 
                             Projeto / Lista
                         </label>
                         <div className="relative group">
-                            <Hash className="w-4 h-4 text-gray-500 absolute left-3.5 top-1/2 -translate-y-1/2 group-focus-within:text-violet-400 transition-colors" />
+                            <Hash className="w-4 h-4 text-gray-500 absolute left-3.5 top-1/2 -translate-y-1/2 group-focus-within:text-gray-300 transition-colors" />
                             <select
                                 value={editedTask.project || "Entrada"}
                                 onChange={handleProjectChange}
-                                className="w-full bg-gray-900 border border-gray-700 text-gray-100 rounded-xl pl-10 pr-10 py-3 text-sm focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500 transition-all appearance-none shadow-inner cursor-pointer"
+                                className="w-full bg-gray-900 border border-gray-700 text-gray-100 rounded-xl pl-10 pr-10 py-3 text-sm focus:outline-none focus:border-gray-500 focus:ring-1 focus:ring-gray-500/40 transition-all appearance-none shadow-inner cursor-pointer"
                             >
                                 <option value="Entrada">Caixa de Entrada</option>
                                 {projects.map((p) => (
@@ -182,12 +182,18 @@ export function TaskEditModal({ task, onClose, onSave, onDelete, projects = [], 
                         <Trash2 className="w-4 h-4" /> Excluir
                     </button>
                     <div className="flex gap-3">
-                        <button onClick={onClose} className="px-6 py-2.5 text-sm font-bold text-gray-300 hover:text-white hover:bg-gray-700 rounded-xl transition-all">
+                        <button onClick={onClose} className="px-6 py-2.5 text-sm font-bold text-gray-300 hover:text-gray-100 hover:bg-gray-700 rounded-xl transition-all">
                             Cancelar
                         </button>
                         <button
-                            onClick={() => onSave(task.id, editedTask)}
-                            className="px-6 py-2.5 bg-violet-500 hover:bg-violet-600 text-white text-sm font-bold rounded-xl transition-all shadow-[0_0_15px_rgba(139,92,246,0.3)] hover:shadow-[0_0_25px_rgba(139,92,246,0.5)] transform active:scale-95"
+                            onClick={() => onSave(task.id, {
+                                title: editedTask.title,
+                                date: editedTask.date,
+                                time: editedTask.time,
+                                priority: editedTask.priority,
+                                project: editedTask.project,
+                            })}
+                            className="px-6 py-2.5 bg-indigo-500 hover:bg-indigo-600 text-white text-sm font-bold rounded-xl transition-all shadow-md transform active:scale-95"
                         >
                             Salvar Alterações
                         </button>

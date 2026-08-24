@@ -1,51 +1,176 @@
 // =============================================================
 //  useVoiceRecording.js
-//  Custom Hook — Gravação de áudio real via MediaRecorder + transcrição Whisper.
-//  Feature 3 — Dictation.
+//  Gravação e transcrição de voz com duas estratégias:
 //
-//  Fluxo: usuário abre painel de gravação → timer inicia → clica ✔️ para transcrever
-//         (auto-submit via onTranscribed) ou ❌ para cancelar.
+//  1. Web Speech API (primária) — nativa do Chromium/WebView2.
+//     Zero-config, gratuita, sem modelo para baixar, real-time.
+//     Funciona em Tauri WebView2 com internet.
+//
+//  2. Faster-Whisper local (fallback) — se Web Speech API
+//     não estiver disponível no runtime atual.
+//
+//  Fluxo Web Speech API:
+//    clica mic → reconhecimento em tempo real → texto aparece live
+//    clica ✔️ → recognition.stop() → commit do resultado final
+//    clica ❌ → recognition.abort() → descarta tudo
+//
+//  Fluxo Whisper (fallback):
+//    clica mic → MediaRecorder grava → clica ✔️ → blob → sidecar → texto
 // =============================================================
 
 import { useState, useRef, useCallback, useEffect } from "react";
 import toast from "react-hot-toast";
 import { transcribeAudio } from "../services/whisperService";
+import { logger } from "../utils/logger";
 
-/**
- * @param {(value: string) => void} setInputValue - Setter do estado do input.
- * @param {(text: string) => void} [onTranscribed] - Callback chamado após a transcrição (auto-submit).
- */
+// Detecta Web Speech API no runtime atual (Chromium/WebView2)
+const SpeechRecognitionAPI =
+    typeof window !== "undefined"
+        ? (window.SpeechRecognition || window.webkitSpeechRecognition)
+        : null;
+
 export function useVoiceRecording(setInputValue, onTranscribed) {
     const [isRecording, setIsRecording] = useState(false);
     const [isTranscribing, setIsTranscribing] = useState(false);
     const [elapsedTime, setElapsedTime] = useState(0);
-    // ✅ Usar useState (não useRef) para que mudanças disparem re-render no SmartInput
     const [mediaStream, setMediaStream] = useState(null);
 
+    // Refs Web Speech API
+    const recognitionRef = useRef(null);
+    const finalTranscriptRef = useRef("");
+    const cancelledRef = useRef(false);
+
+    // Refs Whisper fallback
     const mediaRecorderRef = useRef(null);
     const chunksRef = useRef([]);
+
     const timerRef = useRef(null);
-    const cancelledRef = useRef(false);
-    // Mantém referência estável ao callback para evitar stale closures
     const onTranscribedRef = useRef(onTranscribed);
     useEffect(() => { onTranscribedRef.current = onTranscribed; }, [onTranscribed]);
 
-    // ── Timer ───────────────────────────────────────────────────────────────
+    // ── Timer ─────────────────────────────────────────────────────────────────
     useEffect(() => {
         if (isRecording) {
             setElapsedTime(0);
-            timerRef.current = setInterval(() => {
-                setElapsedTime((prev) => prev + 1);
-            }, 1000);
+            timerRef.current = setInterval(() => setElapsedTime((p) => p + 1), 1000);
         } else {
             clearInterval(timerRef.current);
-            timerRef.current = null;
         }
         return () => clearInterval(timerRef.current);
     }, [isRecording]);
 
-    // ── Parar e transcrever ─────────────────────────────────────────────────
-    const _stopAndTranscribe = useCallback(async () => {
+    // ── Cleanup comum ─────────────────────────────────────────────────────────
+    const _releaseStream = useCallback((stream) => {
+        stream?.getTracks().forEach((t) => t.stop());
+    }, []);
+
+    // =========================================================================
+    // ESTRATÉGIA 1: Web Speech API
+    // =========================================================================
+
+    const _startSpeechRecognition = useCallback(async () => {
+        cancelledRef.current = false;
+        finalTranscriptRef.current = "";
+
+        // Pede acesso ao mic simultaneamente para o waveform visual.
+        // O SpeechRecognition já faz isso internamente — aqui só queremos a stream.
+        let stream = null;
+        try {
+            stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            setMediaStream(stream);
+        } catch {
+            // Microfone indisponível para waveform — prossegue sem visualização
+        }
+
+        const recognition = new SpeechRecognitionAPI();
+        recognition.lang = "pt-BR";
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.maxAlternatives = 1;
+
+        recognition.onresult = (event) => {
+            let final = finalTranscriptRef.current;
+            let interim = "";
+
+            for (let i = event.resultIndex; i < event.results.length; i++) {
+                if (event.results[i].isFinal) {
+                    final += event.results[i][0].transcript + " ";
+                } else {
+                    interim = event.results[i][0].transcript;
+                }
+            }
+
+            finalTranscriptRef.current = final;
+            // Mostra resultado em tempo real no input
+            setInputValue((final + interim).trimEnd());
+        };
+
+        recognition.onerror = (event) => {
+            if (cancelledRef.current || event.error === "aborted") return;
+
+            if (event.error === "no-speech") {
+                // Silêncio prolongado — reinicia automaticamente
+                return;
+            }
+
+            if (event.error === "network") {
+                toast.error("Reconhecimento de voz requer conexão com a internet.");
+            } else if (event.error === "not-allowed") {
+                toast.error("Permissão de microfone negada. Verifique as configurações.");
+            } else {
+                logger.warn("[SpeechRecognition] Erro:", event.error);
+            }
+
+            _releaseStream(stream);
+            setMediaStream(null);
+            setIsRecording(false);
+            setElapsedTime(0);
+        };
+
+        recognition.onend = () => {
+            _releaseStream(stream);
+            setMediaStream(null);
+            setIsRecording(false);
+            setElapsedTime(0);
+
+            if (cancelledRef.current) {
+                setInputValue("");
+                return;
+            }
+
+            const text = finalTranscriptRef.current.trim();
+            if (text) {
+                setInputValue(text);
+                onTranscribedRef.current?.(text);
+            }
+        };
+
+        recognitionRef.current = recognition;
+        recognition.start();
+        setIsRecording(true);
+    }, [setInputValue, _releaseStream]);
+
+    const _stopSpeechRecognition = useCallback(() => {
+        recognitionRef.current?.stop();
+        recognitionRef.current = null;
+        // onend do recognition faz o resto
+    }, []);
+
+    const _cancelSpeechRecognition = useCallback(() => {
+        cancelledRef.current = true;
+        recognitionRef.current?.abort();
+        recognitionRef.current = null;
+        finalTranscriptRef.current = "";
+        setInputValue("");
+        setIsRecording(false);
+        setElapsedTime(0);
+    }, [setInputValue]);
+
+    // =========================================================================
+    // ESTRATÉGIA 2: Whisper local (fallback)
+    // =========================================================================
+
+    const _stopAndTranscribeWhisper = useCallback(async () => {
         const recorder = mediaRecorderRef.current;
         if (!recorder || recorder.state === "inactive") return;
 
@@ -56,96 +181,99 @@ export function useVoiceRecording(setInputValue, onTranscribed) {
             recorder.stop();
         });
 
-        // Libera o microfone (Bug 2 fix)
-        if (recorder.stream) {
-            recorder.stream.getTracks().forEach((t) => t.stop());
-        }
+        if (recorder.stream) recorder.stream.getTracks().forEach((t) => t.stop());
 
-        // Se o usuário cancelou enquanto aguardávamos, abort
         if (cancelledRef.current) return;
 
         const blob = new Blob(chunksRef.current, { type: "audio/webm" });
         chunksRef.current = [];
         mediaRecorderRef.current = null;
         setMediaStream(null);
-
         setIsRecording(false);
         setIsTranscribing(true);
 
         const text = await transcribeAudio(blob);
-
         setIsTranscribing(false);
 
         if (text === null) {
-            // Bug 3 fix: toast quando o Whisper falha (backend offline, etc.)
-            toast.error("Falha na transcrição. Verifique se o servidor está rodando.");
+            toast.error("Falha na transcrição. Servidor local indisponível.");
             return;
         }
-
         if (text.trim()) {
             setInputValue(text);
-            // Auto-submit via ref estável (evita stale closure)
             onTranscribedRef.current?.(text);
         }
     }, [setInputValue]);
 
-    // ── Iniciar gravação ────────────────────────────────────────────────────
-    const _startRecording = useCallback(async () => {
+    const _startWhisperRecording = useCallback(async () => {
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             const recorder = new MediaRecorder(stream);
 
             chunksRef.current = [];
             cancelledRef.current = false;
-
             recorder.addEventListener("dataavailable", (e) => {
                 if (e.data.size > 0) chunksRef.current.push(e.data);
             });
 
             recorder.start();
             mediaRecorderRef.current = recorder;
-            // ✅ Setar mediaStream via state ANTES de isRecording,
-            // garantindo que no re-render o SmartInput já tem a stream
             setMediaStream(stream);
             setIsRecording(true);
-        } catch (error) {
-            console.error("[useVoiceRecording] Permissão de microfone negada:", error);
-            toast.error("Permissão de microfone negada. Verifique as configurações do navegador.");
+        } catch {
+            toast.error("Permissão de microfone negada. Verifique as configurações.");
         }
     }, []);
 
-    // ── Cancelar (descartar) ────────────────────────────────────────────────
-    const cancelRecording = useCallback(() => {
+    const _cancelWhisperRecording = useCallback(() => {
         const recorder = mediaRecorderRef.current;
         if (!recorder) return;
 
         cancelledRef.current = true;
-
-        // Para o recorder; o listener de "stop" acima vai ver cancelledRef=true e abortar
         recorder.addEventListener("stop", () => {
             chunksRef.current = [];
             mediaRecorderRef.current = null;
         }, { once: true });
         recorder.stop();
-
-        // Libera o microfone imediatamente
-        if (recorder.stream) {
-            recorder.stream.getTracks().forEach((t) => t.stop());
-        }
+        if (recorder.stream) recorder.stream.getTracks().forEach((t) => t.stop());
 
         setIsRecording(false);
         setElapsedTime(0);
         setMediaStream(null);
     }, []);
 
-    // ── Toggle ──────────────────────────────────────────────────────────────
+    // =========================================================================
+    // API pública — escolhe estratégia automaticamente
+    // =========================================================================
+
     const toggleRecording = useCallback(() => {
         if (isRecording) {
-            _stopAndTranscribe();
-        } else {
-            _startRecording();
+            if (SpeechRecognitionAPI) {
+                _stopSpeechRecognition();
+            } else {
+                _stopAndTranscribeWhisper();
+            }
+            return;
         }
-    }, [isRecording, _startRecording, _stopAndTranscribe]);
+
+        if (SpeechRecognitionAPI) {
+            _startSpeechRecognition();
+        } else {
+            _startWhisperRecording();
+        }
+    }, [
+        isRecording,
+        _startSpeechRecognition, _stopSpeechRecognition,
+        _startWhisperRecording, _stopAndTranscribeWhisper,
+    ]);
+
+    const cancelRecording = useCallback(() => {
+        if (SpeechRecognitionAPI && isRecording) {
+            _cancelSpeechRecognition();
+        } else {
+            _cancelWhisperRecording();
+        }
+    }, [isRecording, _cancelSpeechRecognition, _cancelWhisperRecording]);
 
     return { isRecording, isTranscribing, elapsedTime, toggleRecording, cancelRecording, mediaStream };
 }

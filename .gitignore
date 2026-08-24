@@ -45,6 +45,7 @@ desktop.ini
 
 # ── Ambiente Python (Backend / Server) ────────────────────
 server/.venv/
+server/.venv-build/
 .venv/
 venv/
 ENV/
@@ -97,3 +98,11 @@ temp/
 coverage/
 .nyc_output/
 *.lcov
+audit_report.md
+
+# ── Tauri — sidecar empacotado (binário grande; gere localmente ou no CI) ──
+src-tauri/binaries/*.exe
+src-tauri/target/
+
+# ── Tauri — chave privada de assinatura de updates (nunca commitar) ──
+src-tauri/.signing/

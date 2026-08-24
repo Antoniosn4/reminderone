@@ -1,15 +1,22 @@
 // =============================================================
 //  useTasks.js
-//  Custom Hook — Gerenciamento de estado e lógica de negócio das tarefas.
-//  Responsabilidade: CRUD de tarefas, hidratação do IndexedDB e
-//  integração com a IA via geminiService.
+//  Custom Hook — gerenciamento de estado e lógica das tarefas.
+//  CRUD com persistência incremental no IndexedDB cifrado e
+//  enriquecimento via Gemini com fallback obrigatório.
 // =============================================================
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import toast from "react-hot-toast";
 import { callGemini } from "../services/geminiService";
-import { getAllTasks, saveAllTasks } from "../services/storageService";
+import {
+    getAllTasks,
+    putTask,
+    deleteTaskById,
+} from "../services/secureStorage";
 import { syncTask, deleteCalendarEvent } from "../services/calendarService";
+import { generateId } from "../utils/id";
+import { logger } from "../utils/logger";
+import { useVault } from "../components/vault/VaultContext";
 
 // ----- Schemas de resposta Gemini -----
 
@@ -43,111 +50,28 @@ const SUBTASK_SCHEMA = {
     },
 };
 
-// ----- Fallback -----
+const FALLBACK_PROJECT_LABEL = "Entrada";
+const FALLBACK_PROJECT_COLOR = "#6b7280";
 
-/**
- * Cria um objeto de tarefa básico a partir do texto puro.
- * Usado quando o Gemini está offline ou retorna null.
- */
+// ----- Helpers puros -----
+
 function buildFallbackTask(cleanText) {
     return {
         title: cleanText,
         date: new Date().toISOString().split("T")[0],
         time: "Sem horário",
-        project: "Entrada",
-        projectColor: "#6b7280",
+        project: FALLBACK_PROJECT_LABEL,
+        projectColor: FALLBACK_PROJECT_COLOR,
         priority: "normal",
     };
 }
 
-// ----- Hook -----
+function buildPrompt(cleanText, projectNames) {
+    const today = new Date().toISOString().split("T")[0];
+    const dayOfWeek = new Date().toLocaleDateString("pt-BR", { weekday: "long" });
+    const projectList = projectNames.length > 0 ? projectNames.join(", ") : FALLBACK_PROJECT_LABEL;
 
-export function useTasks() {
-    const [tasks, setTasks] = useState([]);
-    const [isAnalyzing, setIsAnalyzing] = useState(false);
-    const isHydrated = useRef(false);
-
-    // ── Hidratação ──────────────────────────────────────────────────────────
-    useEffect(() => {
-        async function hydrate() {
-            const stored = await getAllTasks();
-            setTasks(stored);
-            isHydrated.current = true;
-        }
-        hydrate();
-    }, []);
-
-    // ── Persistência ────────────────────────────────────────────────────────
-    useEffect(() => {
-        if (!isHydrated.current) return;
-        saveAllTasks(tasks);
-    }, [tasks]);
-
-    // ── Operações de Estado ──────────────────────────────────────────────────
-
-    const updateTask = useCallback((id, updates) => {
-        setTasks((prev) =>
-            prev.map((task) => (task.id === id ? { ...task, ...updates } : task))
-        );
-    }, []);
-
-    const toggleTask = useCallback((id) => {
-        setTasks((prev) =>
-            prev.map((task) =>
-                task.id === id ? { ...task, completed: !task.completed } : task
-            )
-        );
-    }, []);
-
-    const deleteTask = useCallback(async (id) => {
-        setTasks((prev) => {
-            const task = prev.find((t) => t.id === id);
-            if (task?.gcalEventId) deleteCalendarEvent(task.gcalEventId);
-            return prev.filter((t) => t.id !== id);
-        });
-    }, []);
-
-    const updateTaskAndSync = useCallback((id, updates) => {
-        setTasks((prev) => {
-            const updated = prev.map((task) =>
-                task.id === id ? { ...task, ...updates } : task
-            );
-            if ("title" in updates || "time" in updates) {
-                const target = updated.find((t) => t.id === id);
-                if (target) syncTask(target);
-            }
-            return updated;
-        });
-    }, []);
-
-    /**
-     * Interpreta o texto via Gemini e adiciona a nova tarefa.
-     *
-     * Garantias de persistência:
-     *   1. Se o Gemini falhar, o fallback OBRIGATÓRIO cria a tarefa com o texto bruto.
-     *   2. `isAnalyzing` É SEMPRE resetado para false via finally — nunca trava o input.
-     *   3. Auto-submit de voz usa a mesma função com as mesmas garantias.
-     *
-     * @param {string} rawText   - Texto bruto do usuário.
-     * @param {object|null} assignee - Membro @mencionado.
-     */
-    const addTaskFromText = useCallback(
-        async (rawText, assignee = null, projectNames = []) => {
-            if (!rawText.trim()) return;
-
-            setIsAnalyzing(true);
-
-            const cleanText = rawText.replace(/@\w+/g, "").trim();
-
-            // Monta lista de projetos disponíveis para o prompt
-            const defaultProjects = ["Entrada", "Frontend", "Reuniões", "Marketing", "Infra", "Ideias de Produto"];
-            const allProjects = [...new Set([...defaultProjects, ...projectNames])];
-            const projectList = allProjects.join(", ");
-
-            const today = new Date().toISOString().split("T")[0];
-            const dayOfWeek = new Date().toLocaleDateString("pt-BR", { weekday: "long" });
-
-            const prompt = `Você é um assistente de produtividade. Analise a tarefa abaixo e extraia informações estruturadas.
+    return `Você é um assistente de produtividade. Analise a tarefa abaixo e extraia informações estruturadas.
 
 Data de hoje: ${today} (${dayOfWeek}).
 Projetos disponíveis: ${projectList}.
@@ -160,34 +84,118 @@ Regras:
 - "projectColor": escolha uma cor hex harmoniosa.
 
 Entrada do usuário: "${cleanText}"`;
+}
+
+// ----- Hook -----
+
+export function useTasks() {
+    const { key } = useVault();
+    const [tasks, setTasks] = useState([]);
+    const [isAnalyzing, setIsAnalyzing] = useState(false);
+    const tasksRef = useRef(tasks);
+
+    useEffect(() => { tasksRef.current = tasks; }, [tasks]);
+
+    // Hidrata a partir do IndexedDB cifrado quando a chave fica disponível.
+    useEffect(() => {
+        if (!key) {
+            setTasks([]);
+            return;
+        }
+        let cancelled = false;
+        getAllTasks(key).then((loaded) => {
+            if (!cancelled) setTasks(loaded);
+        });
+        return () => { cancelled = true; };
+    }, [key]);
+
+    // ── Operações ──────────────────────────────────────────────────────────
+
+    const updateTask = useCallback((id, updates) => {
+        if (!key) return;
+        setTasks((prev) => {
+            const next = prev.map((t) => (t.id === id ? { ...t, ...updates } : t));
+            const updated = next.find((t) => t.id === id);
+            if (updated) putTask(key, updated);
+            return next;
+        });
+    }, [key]);
+
+    const toggleTask = useCallback((id) => {
+        if (!key) return;
+        setTasks((prev) => {
+            const next = prev.map((t) => (t.id === id ? { ...t, completed: !t.completed } : t));
+            const updated = next.find((t) => t.id === id);
+            if (updated) putTask(key, updated);
+            return next;
+        });
+    }, [key]);
+
+    const deleteTask = useCallback((id) => {
+        const target = tasksRef.current.find((t) => t.id === id);
+        if (target?.gcalEventId) {
+            deleteCalendarEvent(target.gcalEventId);
+        }
+        deleteTaskById(id);
+        setTasks((prev) => prev.filter((t) => t.id !== id));
+    }, []);
+
+    const updateTaskAndSync = useCallback((id, updates) => {
+        if (!key) return;
+        setTasks((prev) => {
+            const next = prev.map((t) => (t.id === id ? { ...t, ...updates } : t));
+            const updated = next.find((t) => t.id === id);
+            if (!updated) return next;
+
+            putTask(key, updated);
+            const requiresGcalSync = "title" in updates || "time" in updates || "date" in updates;
+            if (requiresGcalSync) {
+                syncTask(updated).then((eventId) => {
+                    if (!eventId || eventId === updated.gcalEventId) return;
+                    updateTask(id, { gcalEventId: eventId, syncStatus: "synced" });
+                });
+            }
+            return next;
+        });
+    }, [key, updateTask]);
+
+    /**
+     * Interpreta o texto via Gemini e adiciona a nova tarefa.
+     * Garante que a tarefa nunca é perdida — fallback obrigatório
+     * se a IA falhar.
+     */
+    const addTaskFromText = useCallback(
+        async (rawText, assignee = null, projectNames = []) => {
+            if (!rawText.trim() || !key) return;
+
+            setIsAnalyzing(true);
+            const cleanText = rawText.replace(/@\w+/g, "").trim();
 
             let taskData;
             try {
-                const parsedData = await callGemini(prompt, TASK_PARSE_SCHEMA);
+                const parsedData = await callGemini(
+                    buildPrompt(cleanText, projectNames),
+                    TASK_PARSE_SCHEMA,
+                );
 
                 if (parsedData !== null) {
-                    // ✅ IA funcionou — usa dados enriquecidos
                     taskData = parsedData;
                 } else {
-                    // ⚠️ IA falhou — fallback obrigatório (tarefa NUNCA é perdida)
-                    console.warn("[useTasks] Gemini retornou null — usando fallback local.");
                     toast.error("Sem IA: tarefa salva com dados básicos. Verifique o servidor.", {
                         duration: 4000,
                     });
                     taskData = buildFallbackTask(cleanText);
                 }
             } catch (err) {
-                // Segurança extra — callGemini não lança, mas cobrimos qualquer edge case
-                console.error("[useTasks] Erro inesperado:", err);
+                logger.error("[useTasks] Erro inesperado:", err);
                 toast.error("Erro inesperado. Tarefa salva com dados básicos.");
                 taskData = buildFallbackTask(cleanText);
             } finally {
-                // SEMPRE reseta o estado de loading — nunca trava o input
                 setIsAnalyzing(false);
             }
 
             const newTask = {
-                id: Date.now(),
+                id: generateId(),
                 ...taskData,
                 assignee,
                 syncStatus: "pending",
@@ -196,17 +204,17 @@ Entrada do usuário: "${cleanText}"`;
                 gcalEventId: null,
             };
 
+            await putTask(key, newTask);
             setTasks((prev) => [newTask, ...prev]);
 
-            // Sincronização com GCal (fire-and-forget — não bloqueia UI)
-            syncTask(newTask).then((eventId) => {
-                updateTask(newTask.id, {
-                    syncStatus: "synced",
-                    gcalEventId: eventId ?? null,
-                });
+        syncTask(newTask).then((eventId) => {
+            updateTask(newTask.id, {
+                syncStatus: eventId ? "synced" : "offline",
+                gcalEventId: eventId ?? null,
             });
+        });
         },
-        [updateTask]
+        [key, updateTask],
     );
 
     const generateSubtasks = useCallback(async (taskId, taskTitle) => {
@@ -216,17 +224,55 @@ Entrada do usuário: "${cleanText}"`;
         return subtasks;
     }, [updateTask]);
 
+    /**
+     * Re-sincroniza com o Google Calendar todas as tarefas que estão `offline`
+     * ou `pending` (futuras + sem horário definido continuam pulando o sync).
+     * Retorna { synced, failed } para feedback no UI.
+     */
+    const resyncWithCalendar = useCallback(async () => {
+        if (!key) return { synced: 0, failed: 0 };
+
+        const pending = tasksRef.current.filter(
+            (t) => !t.completed && (t.syncStatus === "offline" || t.syncStatus === "pending"),
+        );
+
+        let synced = 0;
+        let failed = 0;
+        for (const task of pending) {
+            try {
+                const eventId = await syncTask(task);
+                if (eventId) {
+                    updateTask(task.id, {
+                        gcalEventId: eventId,
+                        syncStatus: "synced",
+                    });
+                    synced += 1;
+                } else {
+                    failed += 1;
+                }
+            } catch (err) {
+                logger.error("[useTasks.resync] Falha ao sincronizar:", err);
+                failed += 1;
+            }
+        }
+        return { synced, failed };
+    }, [key, updateTask]);
+
     const toggleSubtask = useCallback((taskId, subtaskIndex) => {
-        setTasks((prev) =>
-            prev.map((task) => {
+        if (!key) return;
+        setTasks((prev) => {
+            const next = prev.map((task) => {
                 if (task.id !== taskId) return task;
                 const updatedSubtasks = task.subtasks.map((sub, i) =>
-                    i === subtaskIndex ? { ...sub, completed: !sub.completed } : sub
+                    i === subtaskIndex ? { ...sub, completed: !sub.completed } : sub,
                 );
                 return { ...task, subtasks: updatedSubtasks };
-            })
-        );
-    }, []);
+            });
+            const updated = next.find((t) => t.id === taskId);
+            if (updated) putTask(key, updated);
+            return next;
+        });
+    }, [key]);
 
     return {
         tasks,
@@ -237,5 +283,6 @@ Entrada do usuário: "${cleanText}"`;
         deleteTask,
         generateSubtasks,
         toggleSubtask,
+        resyncWithCalendar,
     };
 }

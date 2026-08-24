@@ -4,35 +4,66 @@
 //  Responsabilidade única: comunicação com os endpoints /api/calendar/*.
 //
 //  SEGURANÇA: Tokens OAuth ficam em server/token.json (nunca no browser).
+//  URL relativa — o proxy do Vite encaminha ao servidor Python.
 // =============================================================
 
-const BASE_URL = "http://localhost:8000/api/calendar";
+import { apiUrl } from "./apiBase";
+import { logger } from "../utils/logger";
+
+const BASE_PATH = "/api/calendar";
 
 /**
  * Verifica se o usuário já autorizou o acesso ao Google Calendar.
- * @returns {Promise<boolean>}
+ * @returns {Promise<{ connected: boolean, reason: string|null }>}
  */
 export async function getCalendarStatus() {
     try {
-        const res = await fetch(`${BASE_URL}/status`);
-        if (!res.ok) return false;
+        const res = await fetch(apiUrl(`${BASE_PATH}/status`));
+        if (!res.ok) {
+            return { connected: false, reason: `Servidor respondeu ${res.status}` };
+        }
         const data = await res.json();
-        return data.connected === true;
+        return {
+            connected: data.connected === true,
+            reason: typeof data.reason === "string" ? data.reason : null,
+        };
     } catch {
-        return false;
+        return { connected: false, reason: "offline" };
     }
 }
 
 /**
  * Dispara o fluxo OAuth2: o backend abre o browser com a URL do Google.
  * O usuário autoriza → Google redireciona para o callback do backend.
- * @returns {Promise<void>}
+ * @returns {Promise<{ ok: boolean, reason?: string }>}
  */
 export async function connectCalendar() {
     try {
-        await fetch(`${BASE_URL}/auth`);
+        const res = await fetch(apiUrl(`${BASE_PATH}/auth`));
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({ detail: res.statusText }));
+            const reason = err.detail ?? "Erro ao iniciar autorização OAuth";
+            logger.error("[calendarService] Backend recusou autorização:", reason);
+            return { ok: false, reason };
+        }
+        return { ok: true };
     } catch (error) {
-        console.error("[calendarService] Falha ao iniciar autorização OAuth:", error);
+        logger.error("[calendarService] Falha ao iniciar autorização OAuth:", error);
+        return { ok: false, reason: "Servidor local indisponível" };
+    }
+}
+
+/**
+ * Desconecta a conta Google removendo o token OAuth no servidor.
+ * @returns {Promise<boolean>} true se desconectado com sucesso.
+ */
+export async function disconnectCalendar() {
+    try {
+        const res = await fetch(apiUrl(`${BASE_PATH}/disconnect`), { method: "POST" });
+        return res.ok;
+    } catch (error) {
+        logger.error("[calendarService] Falha ao desconectar:", error);
+        return false;
     }
 }
 
@@ -45,7 +76,7 @@ export async function connectCalendar() {
  */
 export async function syncTask(task) {
     try {
-        const res = await fetch(`${BASE_URL}/sync`, {
+        const res = await fetch(apiUrl(`${BASE_PATH}/sync`), {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ task }),
@@ -53,14 +84,14 @@ export async function syncTask(task) {
 
         if (!res.ok) {
             const err = await res.json().catch(() => ({ detail: res.statusText }));
-            console.error("[calendarService] Falha ao sincronizar tarefa:", err.detail);
+            logger.error("[calendarService] Falha ao sincronizar tarefa:", err.detail);
             return null;
         }
 
         const data = await res.json();
         return data.eventId ?? null;
     } catch (error) {
-        console.error("[calendarService] Servidor indisponível:", error);
+        logger.error("[calendarService] Servidor indisponível:", error);
         return null;
     }
 }
@@ -73,12 +104,12 @@ export async function syncTask(task) {
 export async function deleteCalendarEvent(eventId) {
     if (!eventId) return false;
     try {
-        const res = await fetch(`${BASE_URL}/event/${encodeURIComponent(eventId)}`, {
+        const res = await fetch(apiUrl(`${BASE_PATH}/event/${encodeURIComponent(eventId)}`), {
             method: "DELETE",
         });
         return res.ok;
     } catch (error) {
-        console.error("[calendarService] Falha ao remover evento:", error);
+        logger.error("[calendarService] Falha ao remover evento:", error);
         return false;
     }
 }

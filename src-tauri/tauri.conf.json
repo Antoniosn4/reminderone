@@ -1,0 +1,71 @@
+{
+    "$schema": "https://schema.tauri.app/config/2",
+    "productName": "Reminder1",
+    "version": "0.1.0",
+    "identifier": "com.reminder1.desktop",
+    "build": {
+        "beforeDevCommand": "npm run dev",
+        "beforeBuildCommand": "npm run build",
+        "devUrl": "http://localhost:5173",
+        "frontendDist": "../dist"
+    },
+    "app": {
+        "windows": [
+            {
+                "label": "main",
+                "title": "Reminder1",
+                "width": 1280,
+                "height": 800,
+                "minWidth": 960,
+                "minHeight": 640,
+                "decorations": true,
+                "resizable": true,
+                "fullscreen": false,
+                "center": true
+            }
+        ],
+        "security": {
+            "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' ipc: http://ipc.localhost http://localhost:* http://127.0.0.1:* https://github.com https://*.githubusercontent.com; font-src 'self' data:; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self';",
+            "capabilities": ["default"]
+        }
+    },
+    "plugins": {
+        "shell": {
+            "open": true
+        },
+        "updater": {
+            "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDQ4RkMwMjY5MjVENkY3MUMKUldRYzk5WWxhUUw4U0NQNEw2NzhBdjcyaS94WUZoWS9YZUhjdVhoeVhqR3gzWUY4YTZzRUhyWWYK",
+            "endpoints": [
+                "https://github.com/Antoniosn4/Reminder/releases/latest/download/latest.json"
+            ],
+            "windows": {
+                "installMode": "passive"
+            }
+        }
+    },
+    "bundle": {
+        "active": true,
+        "createUpdaterArtifacts": false,
+        "targets": ["msi", "nsis"],
+        "icon": [
+            "icons/32x32.png",
+            "icons/128x128.png",
+            "icons/128x128@2x.png",
+            "icons/icon.ico"
+        ],
+        "resources": [],
+        "externalBin": ["binaries/reminder-server"],
+        "windows": {
+            "wix": {
+                "language": "pt-BR"
+            },
+            "nsis": {
+                "installerIcon": "icons/icon.ico",
+                "installMode": "perMachine"
+            }
+        },
+        "category": "Productivity",
+        "shortDescription": "Assistente local de produtividade",
+        "longDescription": "Reminder1 é um app desktop 100% local: vault cifrado AES-GCM, NLP via Gemini com proxy local e integração opcional com o Google Calendar."
+    }
+}

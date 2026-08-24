@@ -21,10 +21,12 @@
 # =============================================================
 
 import os
+import time
 import webbrowser
 import logging
-from datetime import date, datetime, timezone
-from pathlib import Path
+from datetime import date, datetime, timedelta
+from threading import Lock
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import HTMLResponse
@@ -35,23 +37,73 @@ from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
+from app_paths import app_data_file, google_credentials_file
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
 # ----- Caminhos -----
-BASE_DIR = Path(__file__).resolve().parent.parent
-CREDENTIALS_FILE = BASE_DIR / "credentials.json"
-TOKEN_FILE = BASE_DIR / "token.json"
+CREDENTIALS_FILE = google_credentials_file()
+TOKEN_FILE = app_data_file("token.json")
 
 # ----- Configuração OAuth -----
 SCOPES = ["https://www.googleapis.com/auth/calendar.events"]
 REDIRECT_URI = "http://localhost:8000/api/calendar/callback"
 
+# ----- Configuração de eventos -----
+LOCAL_TZ_NAME = os.getenv("REMINDER_LOCAL_TZ", "America/Sao_Paulo")
+LOCAL_TZ = ZoneInfo(LOCAL_TZ_NAME)
+DEFAULT_EVENT_DURATION_HOURS = 1
+
+# Lembretes (push no app Google Calendar do celular).
+# - method="popup" dispara a notificação nativa do app móvel.
+# - Configuráveis via REMINDER_DEFAULT_NOTIFY_MINUTES (CSV de minutos antes).
+#   Ex: "30,5" → dispara 30 min e 5 min antes do horário.
+# - Limite de 5 overrides por evento (regra atual da API do Google).
+GCAL_MAX_OVERRIDES = 5
+GCAL_DEFAULT_NOTIFY_MINUTES = "30"
+
+
+def _parse_notify_minutes() -> list[int]:
+    raw = os.getenv("REMINDER_DEFAULT_NOTIFY_MINUTES", GCAL_DEFAULT_NOTIFY_MINUTES)
+    minutes: list[int] = []
+    for chunk in raw.split(","):
+        chunk = chunk.strip()
+        if not chunk:
+            continue
+        try:
+            value = int(chunk)
+        except ValueError:
+            continue
+        if 0 <= value <= 40320:  # Google permite até 4 semanas (40320 min).
+            minutes.append(value)
+    return minutes[:GCAL_MAX_OVERRIDES] or [int(GCAL_DEFAULT_NOTIFY_MINUTES)]
+
+
+DEFAULT_NOTIFY_MINUTES = _parse_notify_minutes()
+
 # ----- Estado global em memória (PKCE fix) -----
-# Mapeia state → instância do Flow criada em /auth.
-# Garante que o mesmo Flow (com o code_verifier correto) seja usado em /callback.
-_pending_flows: dict[str, Flow] = {}
+# Mapeia state → (Flow, created_monotonic). Garante que o mesmo Flow
+# (com o code_verifier PKCE correto) seja usado em /callback. Inclui
+# TTL para evitar memory leak e janela de replay.
+PENDING_FLOW_TTL_SEC = 10 * 60  # 10 min — accommodates slow auth (multiple accounts, 2FA)
+_pending_flows: dict[str, tuple[Flow, float]] = {}
+_flows_lock = Lock()
+
+
+def _purge_expired_flows() -> None:
+    """Remove flows OAuth pendentes que excederam o TTL."""
+    now = time.monotonic()
+    with _flows_lock:
+        expired = [
+            state for state, (_, created_at) in _pending_flows.items()
+            if now - created_at > PENDING_FLOW_TTL_SEC
+        ]
+        for state in expired:
+            _pending_flows.pop(state, None)
+        if expired:
+            logger.info("OAuth: %d flow(s) expirado(s) removido(s)", len(expired))
 
 
 # ----- Helpers -----
@@ -68,6 +120,7 @@ def _load_token() -> Credentials | None:
         creds = Credentials.from_authorized_user_file(str(TOKEN_FILE), SCOPES)
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
+            TOKEN_FILE.parent.mkdir(parents=True, exist_ok=True)
             TOKEN_FILE.write_text(creds.to_json(), encoding="utf-8")
         return creds if creds and creds.valid else None
     except Exception as exc:
@@ -86,36 +139,65 @@ def _get_calendar_service():
     return build("calendar", "v3", credentials=creds, cache_discovery=False)
 
 
+def _resolve_task_date(task: dict) -> date:
+    """Lê `task.date` no formato ISO; cai para hoje se ausente ou inválido."""
+    raw = task.get("date")
+    if not raw:
+        return date.today()
+    try:
+        return date.fromisoformat(raw)
+    except (ValueError, TypeError):
+        return date.today()
+
+
+def _build_reminders() -> dict:
+    """Configura overrides de notificação push (popup) para o evento."""
+    return {
+        "useDefault": False,
+        "overrides": [
+            {"method": "popup", "minutes": minutes}
+            for minutes in DEFAULT_NOTIFY_MINUTES
+        ],
+    }
+
+
 def _parse_task_to_event(task: dict) -> dict:
     """
-    Converte um objeto de tarefa do Reminder em um recurso de evento GCal.
-    - Se `time` contiver ":" (ex: "10:00", "14:30") → evento com hora exata (1h duração)
-    - Caso contrário → evento de dia inteiro (all-day)
+    Converte uma tarefa do Reminder em um recurso de evento do Google Calendar.
+    - `time` no formato HH:MM → evento com hora exata na timezone local.
+    - Caso contrário → evento de dia inteiro (all-day) na data da tarefa.
+    Inclui sempre `reminders.overrides` (popup) para garantir notificação
+    push no app Google Calendar do celular do usuário.
     """
-    today = date.today().isoformat()
     title = task.get("title", "Tarefa sem título")
-    raw_time: str = task.get("time", "")
+    raw_time: str = task.get("time", "") or ""
+    task_date = _resolve_task_date(task)
+    reminders = _build_reminders()
 
     if ":" in raw_time:
         try:
             hour, minute = map(int, raw_time.split(":")[:2])
             start_dt = datetime(
-                date.today().year, date.today().month, date.today().day,
-                hour, minute, tzinfo=timezone.utc,
+                task_date.year, task_date.month, task_date.day,
+                hour, minute, tzinfo=LOCAL_TZ,
             )
-            end_dt = start_dt.replace(hour=min(hour + 1, 23))
+            end_dt = start_dt + timedelta(hours=DEFAULT_EVENT_DURATION_HOURS)
             return {
                 "summary": title,
-                "start": {"dateTime": start_dt.isoformat(), "timeZone": "UTC"},
-                "end":   {"dateTime": end_dt.isoformat(),   "timeZone": "UTC"},
+                "start": {"dateTime": start_dt.isoformat(), "timeZone": LOCAL_TZ_NAME},
+                "end":   {"dateTime": end_dt.isoformat(),   "timeZone": LOCAL_TZ_NAME},
+                "reminders": reminders,
             }
         except (ValueError, TypeError):
             pass
 
+    iso_date = task_date.isoformat()
+    end_date = (task_date + timedelta(days=1)).isoformat()
     return {
         "summary": title,
-        "start": {"date": today},
-        "end":   {"date": today},
+        "start": {"date": iso_date},
+        "end":   {"date": end_date},
+        "reminders": reminders,
     }
 
 
@@ -131,7 +213,10 @@ class SyncPayload(BaseModel):
 def calendar_status():
     """Informa se o usuário está autenticado no Google Calendar."""
     if not _credentials_exist():
-        return {"connected": False, "reason": "credentials.json não encontrado em server/"}
+        return {
+            "connected": False,
+            "reason": f"credentials.json nao encontrado. Coloque em {CREDENTIALS_FILE.parent}",
+        }
     creds = _load_token()
     return {"connected": creds is not None}
 
@@ -148,10 +233,12 @@ def calendar_auth():
         raise HTTPException(
             status_code=500,
             detail=(
-                "Arquivo 'server/credentials.json' não encontrado. "
-                "Siga as instruções do plano para criar as credenciais no Google Cloud Console."
+                f"Arquivo credentials.json nao encontrado em {CREDENTIALS_FILE.parent}. "
+                "Crie credenciais OAuth no Google Cloud Console e coloque o JSON nesse local."
             ),
         )
+
+    _purge_expired_flows()
 
     flow = Flow.from_client_secrets_file(
         str(CREDENTIALS_FILE),
@@ -165,8 +252,9 @@ def calendar_auth():
         access_type="offline",
     )
 
-    # ✅ PKCE fix: guarda a instância do Flow vinculada ao state
-    _pending_flows[state] = flow
+    # PKCE fix: guarda a instância do Flow vinculada ao state, com timestamp para TTL.
+    with _flows_lock:
+        _pending_flows[state] = (flow, time.monotonic())
     logger.info("Flow pendente criado para state=%s", state[:12])
 
     webbrowser.open(auth_url)
@@ -180,18 +268,24 @@ def calendar_callback(code: str = Query(...), state: str = Query(...)):
     Recupera a instância do Flow original (com o code_verifier PKCE intacto),
     troca o code por tokens e salva em token.json.
     """
-    # ✅ PKCE fix: recupera o Flow que foi criado em /auth
-    flow = _pending_flows.pop(state, None)
-    if flow is None:
+    _purge_expired_flows()
+
+    # PKCE fix: recupera o Flow que foi criado em /auth (e checa TTL).
+    with _flows_lock:
+        entry = _pending_flows.pop(state, None)
+    if entry is None:
         logger.error("Flow não encontrado para state=%s. Possível replay ou expiração.", state[:12])
         raise HTTPException(
             status_code=400,
             detail="Sessão OAuth inválida ou expirada. Tente conectar novamente.",
         )
 
+    flow, _created_at = entry
+
     try:
         flow.fetch_token(code=code)
         creds = flow.credentials
+        TOKEN_FILE.parent.mkdir(parents=True, exist_ok=True)
         TOKEN_FILE.write_text(creds.to_json(), encoding="utf-8")
         logger.info("Token OAuth salvo com sucesso em token.json.")
     except Exception as exc:
@@ -221,6 +315,19 @@ def calendar_callback(code: str = Query(...), state: str = Query(...)):
     </body>
     </html>
     """
+
+
+@router.post("/calendar/disconnect")
+def calendar_disconnect():
+    """Remove o token OAuth local, desconectando a conta Google."""
+    try:
+        if TOKEN_FILE.exists():
+            TOKEN_FILE.unlink()
+            logger.info("Token OAuth removido com sucesso.")
+        return {"disconnected": True}
+    except Exception as exc:
+        logger.error("Falha ao remover token: %s", exc)
+        raise HTTPException(status_code=500, detail=f"Falha ao desconectar: {exc}")
 
 
 @router.post("/calendar/sync")

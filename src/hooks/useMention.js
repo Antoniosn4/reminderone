@@ -1,21 +1,23 @@
 // =============================================================
 //  useMention.js
 //  Custom Hook — Lógica de @mention: detecção, menu e inserção.
+//  Refatorado para usar equipes dinâmicas (sem MOCK_TEAM).
 // =============================================================
 
 import { useState, useCallback } from "react";
-import { MOCK_TEAM } from "../constants/mockTeam";
 
 /**
  * Extrai o membro da equipe mencionado em uma string de texto.
  * Retorna o primeiro match encontrado, ou null.
  *
  * @param {string} text
- * @returns {import("../constants/mockTeam").TeamMember | null}
+ * @param {Array<{id: string, name: string}>} [members] - Lista de membros mencionáveis
+ * @returns {{ id: string, name: string } | null}
  */
-export function extractMentionedMember(text) {
+export function extractMentionedMember(text, members = []) {
+    if (!text || members.length === 0) return null;
     return (
-        MOCK_TEAM.find((member) =>
+        members.find((member) =>
             text.toLowerCase().includes(`@${member.name.toLowerCase()}`)
         ) ?? null
     );

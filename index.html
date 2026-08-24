@@ -1,12 +1,23 @@
 <!doctype html>
 <html lang="pt-br">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Reminder App</title>
-  </head>
-  <body class="bg-gray-900 text-gray-200">
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
-  </body>
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+
+
+  <link rel="icon" type="image/png" href="/logonova.png" />
+  <title>ReminderONE</title>
+</head>
+
+<body class="bg-gray-900 text-gray-200">
+  <div id="root"></div>
+  <script>
+    // Aplica tema antes do primeiro paint para evitar flash.
+    try{var t=localStorage.getItem("reminder-theme");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}
+  </script>
+  <script type="module" src="/src/main.jsx"></script>
+</body>
+
 </html>

@@ -3,11 +3,14 @@
 //  Camada de integração com o endpoint de transcrição de voz.
 //  Responsabilidade única: enviar um blob de áudio e retornar o texto.
 //
-//  SEGURANÇA: O processamento ocorre no servidor local (localhost:8000).
-//  Nenhuma chave de API é necessária ou exposta neste arquivo.
+//  SEGURANÇA: O processamento ocorre no servidor local.
+//  URL relativa (`/api/whisper`) — encaminhada via proxy do Vite.
 // =============================================================
 
-const WHISPER_URL = "http://localhost:8000/api/whisper";
+import { logger } from "../utils/logger";
+import { apiUrl } from "./apiBase";
+
+const WHISPER_PATH = "/api/whisper";
 
 /**
  * Envia um Blob de áudio para o endpoint Whisper local e retorna o texto transcrito.
@@ -21,24 +24,24 @@ export async function transcribeAudio(audioBlob) {
         // O nome do arquivo informa ao backend a extensão correta para o tempfile
         formData.append("file", audioBlob, "recording.webm");
 
-        const response = await fetch(WHISPER_URL, {
+        const response = await fetch(apiUrl(WHISPER_PATH), {
             method: "POST",
             body: formData,
         });
 
         if (!response.ok) {
             const error = await response.json().catch(() => ({ detail: response.statusText }));
-            console.error("[whisperService] Erro do servidor:", error.detail);
+            logger.error("[whisperService] Erro do servidor:", error.detail);
             return null;
         }
 
         const data = await response.json();
         if (data.device) {
-            console.info(`[Whisper] Device: ${data.device}`);
+            logger.info(`[Whisper] Device: ${data.device}`);
         }
         return data.text ?? null;
     } catch (error) {
-        console.error(
+        logger.error(
             "[whisperService] Falha ao contatar o servidor de transcrição. Verifique se 'server/main.py' está rodando:",
             error
         );

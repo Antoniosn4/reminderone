@@ -10,7 +10,16 @@
 // =============================================================
 
 import { useRef, useEffect, useState } from "react";
-import { Mic, Plus, Send, Loader2, X, Check } from "lucide-react";
+import { Mic, Plus, Send, Loader2, X, Check, MicOff } from "lucide-react";
+
+/** Detecta suporte a voz: Web Speech API (primário) ou MediaRecorder (fallback Whisper). */
+const IS_VOICE_SUPPORTED = typeof navigator !== "undefined" && (
+    !!(window.SpeechRecognition || window.webkitSpeechRecognition) ||
+    (typeof navigator.mediaDevices?.getUserMedia === "function" && typeof window.MediaRecorder !== "undefined")
+);
+
+const IS_SPEECH_RECOGNITION = typeof window !== "undefined" &&
+    !!(window.SpeechRecognition || window.webkitSpeechRecognition);
 
 /** Número de barras no waveform visual. */
 const BAR_COUNT = 9;
@@ -142,7 +151,7 @@ export function SmartInput({
 }) {
     const isLoadingState = isAnalyzing || isTranscribing;
     const showSendButton = value && !isRecording && !isLoadingState;
-    const showMicButton = !value && !isLoadingState && !isRecording;
+    const showMicButton = IS_VOICE_SUPPORTED && !value && !isLoadingState && !isRecording;
 
     // Waveform via Web Audio API
     const barHeights = useWaveform(mediaStream, isRecording);
@@ -150,7 +159,7 @@ export function SmartInput({
     // ── Modo Gravação ──────────────────────────────────────────────────────
     if (isRecording) {
         return (
-            <div className="relative flex flex-col items-center justify-center bg-gray-800 border border-violet-500/60 rounded-2xl p-6 shadow-xl shadow-violet-500/20 gap-5">
+            <div className="relative flex flex-col items-center justify-center bg-gray-800 border border-blue-500/50 rounded-2xl p-6 shadow-xl shadow-blue-500/15 gap-5">
 
                 {/* Timer */}
                 <div className="flex items-center gap-2">
@@ -158,7 +167,9 @@ export function SmartInput({
                     <span className="text-red-400 text-sm font-semibold tracking-widest font-mono">
                         {formatTime(elapsedTime)}
                     </span>
-                    <span className="text-gray-500 text-xs">Gravando…</span>
+                    <span className="text-gray-500 text-xs">
+                        {IS_SPEECH_RECOGNITION ? "Ouvindo… fale agora" : "Gravando…"}
+                    </span>
                 </div>
 
                 {/* Waveform — barras com altura absoluta em pixels */}
@@ -170,8 +181,8 @@ export function SmartInput({
                             style={{
                                 width: "5px",
                                 height: `${heightPx}px`,
-                                backgroundColor: heightPx > MAX_PX * 0.5 ? "#a78bfa" : "#7c3aed",
-                                boxShadow: heightPx > MAX_PX * 0.4 ? "0 0 8px rgba(139,92,246,0.5)" : "none",
+                                backgroundColor: heightPx > MAX_PX * 0.5 ? "#60a5fa" : "#3b82f6",
+                                boxShadow: heightPx > MAX_PX * 0.4 ? "0 0 8px rgba(96,165,250,0.4)" : "none",
                             }}
                         />
                     ))}
@@ -194,11 +205,11 @@ export function SmartInput({
                     <button
                         type="button"
                         onClick={onToggleRecording}
-                        title="Finalizar e transcrever"
-                        className="flex items-center gap-2 px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white border border-violet-500 hover:border-violet-400 transition-all text-sm font-medium shadow-lg shadow-violet-500/30"
+                        title={IS_SPEECH_RECOGNITION ? "Confirmar texto" : "Finalizar e transcrever"}
+                        className="flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white border border-blue-500 hover:border-blue-400 transition-all text-sm font-medium shadow-lg shadow-blue-500/25"
                     >
                         <Check className="w-4 h-4" />
-                        Finalizar
+                        {IS_SPEECH_RECOGNITION ? "Confirmar" : "Finalizar"}
                     </button>
                 </div>
 
@@ -242,8 +253,15 @@ export function SmartInput({
             <div className="flex items-center gap-2 pr-2">
                 {/* Spinner quando IA ou transcrição está processando */}
                 {isLoadingState && (
-                    <div className={`p-3 animate-spin ${isTranscribing ? "text-blue-400" : "text-violet-400"}`}>
-                        <Loader2 className="w-6 h-6" />
+                    <div className="flex items-center gap-2">
+                        <div className={`animate-spin ${isTranscribing ? "text-blue-400" : "text-gray-400"}`}>
+                            <Loader2 className="w-6 h-6" />
+                        </div>
+                        {isTranscribing && (
+                            <span className="text-xs text-blue-400 font-medium whitespace-nowrap">
+                                Carregando modelo de voz…
+                            </span>
+                        )}
                     </div>
                 )}
 
@@ -263,7 +281,7 @@ export function SmartInput({
                         type="button"
                         onClick={onToggleRecording}
                         title="Gravar por voz"
-                        className="p-3 rounded-xl transition-all text-gray-500 hover:text-violet-400 hover:bg-violet-500/10"
+                        className="p-3 rounded-xl transition-all text-gray-500 hover:text-gray-300 hover:bg-gray-700/60"
                     >
                         <Mic className="w-5 h-5" />
                     </button>

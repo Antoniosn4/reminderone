@@ -1,20 +1,59 @@
 // =============================================================
 //  WeeklyReportModal.jsx
-//  Modal de Revisão Semanal com distribuição de foco e insight da IA.
-//  Feature 4 — Resumo Semanal.
+//  Modal de Revisão Semanal com distribuição de foco REAL
+//  calculada a partir das tarefas concluídas nos últimos 7 dias.
 // =============================================================
 
-import { X, BarChart2, TrendingUp, Sparkles } from "lucide-react";
+import { useMemo } from "react";
+import { X, BarChart2, TrendingUp, CheckCircle2 } from "lucide-react";
 
-// ----- Dados mockados do relatório -----
-
-const FOCUS_DISTRIBUTION = [
-    { label: "Frontend", percentage: 73, color: "bg-blue-500" },
-    { label: "Reuniões", percentage: 27, color: "bg-violet-500" },
+/** Cor atribuída a cada projeto na barra de distribuição. */
+const PROJECT_COLORS = [
+    "bg-indigo-500", "bg-blue-500", "bg-emerald-500",
+    "bg-rose-500", "bg-amber-500", "bg-cyan-500",
+    "bg-pink-500", "bg-violet-400",
 ];
 
-const AI_INSIGHT =
-    "Você foi muito focado em Frontend essa semana. Tarefas de Infra estão pendentes — considere delegar para o @Paulo na próxima semana.";
+function getWeekAgoISO() {
+    const d = new Date();
+    d.setDate(d.getDate() - 7);
+    return d.toISOString().split("T")[0];
+}
+
+function computeFocusDistribution(tasks) {
+    const weekAgo = getWeekAgoISO();
+    const recentCompleted = tasks.filter(
+        (t) => t.completed && t.date && t.date >= weekAgo,
+    );
+
+    if (recentCompleted.length === 0) return [];
+
+    const counts = {};
+    for (const t of recentCompleted) {
+        const project = t.project || "Sem projeto";
+        counts[project] = (counts[project] || 0) + 1;
+    }
+
+    const total = recentCompleted.length;
+    return Object.entries(counts)
+        .sort(([, a], [, b]) => b - a)
+        .map(([label, count], i) => ({
+            label,
+            percentage: Math.round((count / total) * 100),
+            color: PROJECT_COLORS[i % PROJECT_COLORS.length],
+        }));
+}
+
+function generateInsight(distribution, totalCompleted) {
+    if (totalCompleted === 0) {
+        return "Nenhuma tarefa concluída nos últimos 7 dias. Que tal começar pela mais simples?";
+    }
+    if (distribution.length === 1) {
+        return `Foco total em "${distribution[0].label}" esta semana — ${totalCompleted} tarefa(s) concluída(s). Considere diversificar.`;
+    }
+    const top = distribution[0];
+    return `Você completou ${totalCompleted} tarefa(s) esta semana. Foco principal em "${top.label}" (${top.percentage}%).`;
+}
 
 // ----- Sub-componente: Barra de progresso -----
 
@@ -35,12 +74,23 @@ function FocusBar({ label, percentage, color }) {
     );
 }
 
-// ----- Componente principal -----
-
 /**
- * @param {{ isOpen: boolean, onClose: () => void }} props
+ * @param {{ isOpen: boolean, onClose: () => void, tasks: Array }} props
  */
-export function WeeklyReportModal({ isOpen, onClose }) {
+export function WeeklyReportModal({ isOpen, onClose, tasks = [] }) {
+    const distribution = useMemo(() => computeFocusDistribution(tasks), [tasks]);
+
+    const weekAgo = getWeekAgoISO();
+    const totalCompleted = useMemo(
+        () => tasks.filter((t) => t.completed && t.date && t.date >= weekAgo).length,
+        [tasks, weekAgo],
+    );
+
+    const insight = useMemo(
+        () => generateInsight(distribution, totalCompleted),
+        [distribution, totalCompleted],
+    );
+
     if (!isOpen) return null;
 
     return (
@@ -48,7 +98,6 @@ export function WeeklyReportModal({ isOpen, onClose }) {
             className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm"
             onClick={onClose}
         >
-            {/* Impede que cliques internos fechem o modal */}
             <div
                 className="bg-gray-900 border border-gray-700 rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl"
                 onClick={(e) => e.stopPropagation()}
@@ -56,7 +105,7 @@ export function WeeklyReportModal({ isOpen, onClose }) {
                 {/* Cabeçalho */}
                 <header className="p-5 border-b border-gray-800 flex justify-between items-center">
                     <h2 className="text-lg font-bold text-gray-100 flex items-center gap-2">
-                        <BarChart2 className="w-5 h-5 text-violet-400" />
+                        <BarChart2 className="w-5 h-5 text-indigo-400" />
                         Revisão Semanal
                     </h2>
                     <button
@@ -70,25 +119,34 @@ export function WeeklyReportModal({ isOpen, onClose }) {
 
                 {/* Corpo */}
                 <div className="p-6 space-y-6">
-                    {/* Distribuição de foco */}
-                    <section>
-                        <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-2">
-                            <TrendingUp className="w-4 h-4" /> Distribuição de Foco
-                        </h3>
-                        <div className="space-y-3">
-                            {FOCUS_DISTRIBUTION.map((item) => (
-                                <FocusBar key={item.label} {...item} />
-                            ))}
+                    {/* Métricas */}
+                    <div className="flex items-center gap-6">
+                        <div className="p-3 bg-emerald-500/10 rounded-xl border border-emerald-500/20">
+                            <CheckCircle2 className="w-6 h-6 text-emerald-400" />
                         </div>
-                    </section>
+                        <div>
+                            <span className="text-3xl font-extrabold text-gray-100">{totalCompleted}</span>
+                            <p className="text-sm text-gray-400 mt-0.5">tarefas concluídas nos últimos 7 dias</p>
+                        </div>
+                    </div>
 
-                    {/* Insight da IA */}
+                    {/* Distribuição de foco */}
+                    {distribution.length > 0 && (
+                        <section>
+                            <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+                                <TrendingUp className="w-4 h-4" /> Distribuição de Foco
+                            </h3>
+                            <div className="space-y-3">
+                                {distribution.map((item) => (
+                                    <FocusBar key={item.label} {...item} />
+                                ))}
+                            </div>
+                        </section>
+                    )}
+
+                    {/* Insight real */}
                     <section className="p-4 bg-gray-800/50 rounded-xl border border-gray-700/50">
-                        <div className="flex items-center gap-2 mb-2">
-                            <Sparkles className="w-4 h-4 text-emerald-400" />
-                            <h3 className="text-sm font-bold text-gray-200">Insight da IA</h3>
-                        </div>
-                        <p className="text-gray-400 text-sm leading-relaxed">{AI_INSIGHT}</p>
+                        <p className="text-gray-400 text-sm leading-relaxed">{insight}</p>
                     </section>
                 </div>
             </div>
