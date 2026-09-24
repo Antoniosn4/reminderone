@@ -21,6 +21,8 @@ import {
     Minus,
     ArrowUp,
     AlertCircle,
+    Timer,
+    Tag,
 } from "lucide-react";
 import { SubtaskList } from "./SubtaskList";
 import { Avatar } from "../Avatar";
@@ -233,7 +235,25 @@ export function TaskItem({
                                         </span>
                                     );
                                 })()}
+                                {task.estimatedDuration && !task.completed && (
+                                    <span className="flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-md border border-gray-700 text-gray-400 bg-gray-900">
+                                        <Timer className="w-3 h-3" />
+                                        {task.estimatedDuration}min
+                                    </span>
+                                )}
+                                {task.tags?.length > 0 && !task.completed && (
+                                    <span className="flex items-center gap-1 text-[11px] text-indigo-300">
+                                        <Tag className="w-3 h-3" />
+                                        {task.tags.slice(0, 3).map((t) => `#${t}`).join(" ")}
+                                        {task.tags.length > 3 && ` +${task.tags.length - 3}`}
+                                    </span>
+                                )}
                             </div>
+                            {task.description && !task.completed && (
+                                <p className="text-[11px] text-gray-500 mt-1 truncate max-w-md">
+                                    {task.description}
+                                </p>
+                            )}
                         </div>
                     ) : (
                         /* ── Modo de edição inline ── */

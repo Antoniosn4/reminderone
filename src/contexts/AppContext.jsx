@@ -85,7 +85,7 @@ function useAppProvider() {
 
     // ── Domain hooks ──
     const {
-        tasks, isAnalyzing, addTaskFromText, toggleTask,
+        tasks, isAnalyzing, addTaskFromText, addTaskManual, toggleTask,
         updateTask, deleteTask, generateSubtasks, toggleSubtask, resyncWithCalendar,
     } = useTasks();
 
@@ -146,6 +146,7 @@ function useAppProvider() {
     const [isNewProjectOpen, setIsNewProjectOpen] = useState(false);
     const [editingProject, setEditingProject] = useState(null);
     // Teams modal state removed — v0.1.0
+    const [isCreateTaskOpen, setIsCreateTaskOpen] = useState(false);
     const [isNewRoutineOpen, setIsNewRoutineOpen] = useState(false);
     const [editingRoutine, setEditingRoutine] = useState(null);
     const [selectedCalendarDate, setSelectedCalendarDate] = useState(null);
@@ -194,6 +195,12 @@ function useAppProvider() {
     };
 
     // ── CRUD handlers ──
+    const handleTaskCreate = useCallback(async (taskFields) => {
+        await addTaskManual(taskFields);
+        setIsCreateTaskOpen(false);
+        toast.success("✅ Tarefa criada", { duration: 2000 });
+    }, [addTaskManual]);
+
     const handleTaskEditSave = useCallback((id, updates) => {
         updateTask(id, updates); setEditingTask(null);
         toast.success("Tarefa atualizada", { duration: 2000 });
@@ -293,6 +300,7 @@ function useAppProvider() {
         showWeeklyReport, setShowWeeklyReport,
         isSearchOpen, setIsSearchOpen,
         isQuickAddOpen, setIsQuickAddOpen,
+        isCreateTaskOpen, setIsCreateTaskOpen,
         editingTask, setEditingTask,
         isNewProjectOpen, setIsNewProjectOpen,
         editingProject, setEditingProject,
@@ -303,6 +311,7 @@ function useAppProvider() {
         editingNote, setEditingNote,
         showOnboarding, setShowOnboarding,
         // CRUD handlers
+        handleTaskCreate,
         handleTaskEditSave, handleTaskEditDelete,
         handleNewProject, handleEditProjectSave, handleDeleteProject,
 

@@ -14,6 +14,7 @@ import { QuickAddModal } from "./QuickAddModal";
 import { SmartInput } from "./SmartInput";
 import { MentionMenu } from "./MentionMenu";
 import { TaskEditModal } from "./modals/TaskEditModal";
+import { TaskCreateModal } from "./modals/TaskCreateModal";
 import { NewProjectModal, EditProjectModal } from "./modals/ProjectModals";
 // TeamModals removed — Teams feature not in v0.1.0
 import { NewRoutineModal, EditRoutineModal } from "./modals/RoutineModals";
@@ -53,6 +54,15 @@ export function AppModals() {
                 onClose={() => ctx.setEditingTask(null)}
                 onSave={ctx.handleTaskEditSave}
                 onDelete={ctx.handleTaskEditDelete}
+                projects={ctx.projects}
+                onCreateNewProject={() => ctx.setIsNewProjectOpen(true)}
+            />
+
+            {/* Task Create */}
+            <TaskCreateModal
+                isOpen={ctx.isCreateTaskOpen}
+                onClose={() => ctx.setIsCreateTaskOpen(false)}
+                onSave={ctx.handleTaskCreate}
                 projects={ctx.projects}
                 onCreateNewProject={() => ctx.setIsNewProjectOpen(true)}
             />

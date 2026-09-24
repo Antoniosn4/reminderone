@@ -8,6 +8,7 @@
 import {
     BarChart2, CheckCircle2, Star, History,
     AlertCircle, Calendar, StickyNote, KanbanSquare,
+    PlusCircle,
 } from "lucide-react";
 
 import { useAppContext } from "../contexts/AppContext";
@@ -90,12 +91,20 @@ export function MainContent() {
                 </div>
                 <div className="flex items-center gap-3">
                     {activeView !== "settings" && !activeView.startsWith("routine_") && (
-                        <button
-                            onClick={() => setShowWeeklyReport(true)}
-                            className="flex items-center gap-2 text-xs font-semibold text-indigo-400 bg-gray-800 hover:bg-gray-700 px-3 py-1.5 rounded-lg border border-gray-700 transition-colors"
-                        >
-                            <BarChart2 className="w-4 h-4" /> Resumo
-                        </button>
+                        <>
+                            <button
+                                onClick={() => ctx.setIsCreateTaskOpen(true)}
+                                className="flex items-center gap-2 text-xs font-semibold text-emerald-400 bg-gray-800 hover:bg-gray-700 px-3 py-1.5 rounded-lg border border-gray-700 transition-colors"
+                            >
+                                <PlusCircle className="w-4 h-4" /> Nova Tarefa
+                            </button>
+                            <button
+                                onClick={() => setShowWeeklyReport(true)}
+                                className="flex items-center gap-2 text-xs font-semibold text-indigo-400 bg-gray-800 hover:bg-gray-700 px-3 py-1.5 rounded-lg border border-gray-700 transition-colors"
+                            >
+                                <BarChart2 className="w-4 h-4" /> Resumo
+                            </button>
+                        </>
                     )}
                     <AccountButton onResyncCalendar={handleResyncCalendar} isResyncing={isResyncing} />
                 </div>
