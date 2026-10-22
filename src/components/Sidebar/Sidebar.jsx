@@ -17,6 +17,7 @@ import { SidebarRoutine } from "./SidebarRoutine";
 import { renderIcon } from "../../constants/renderIcon";
 import { useVault } from "../vault/VaultContext";
 import { Avatar } from "../Avatar";
+import { useSyncStatus } from "../../data/DataContext";
 
 const USER_AVATAR_SIZE_PX = 32;
 const DEFAULT_DISPLAY_NAME = "Usuário";
@@ -53,8 +54,15 @@ export function Sidebar({
     });
 
     const { lock, profile } = useVault();
+    const sync = useSyncStatus();
     const displayName = profile?.name?.trim() || DEFAULT_DISPLAY_NAME;
-    const displayEmail = profile?.email?.trim() || "Conta local";
+    const syncLabel = sync.state === "inactive"
+        ? profile?.email?.trim() || "Conta local"
+        : sync.state === "error"
+            ? "Sincronização com erro"
+            : sync.state === "syncing"
+                ? "Sincronizando…"
+                : "Sincronização ativa";
 
     const toggleFolder = (key) =>
         setExpandedFolders((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -157,11 +165,16 @@ export function Sidebar({
                         <div className="rounded-full bg-gradient-to-tr from-indigo-500 to-emerald-400 p-[2px]">
                             <Avatar name={displayName} size={USER_AVATAR_SIZE_PX} />
                         </div>
-                        <span className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 border-2 border-gray-900 rounded-full" />
+                        <span
+                            title={syncLabel}
+                            className={`absolute bottom-0 right-0 w-3 h-3 border-2 border-gray-900 rounded-full ${
+                                sync.state === "error" ? "bg-rose-500" : sync.state === "inactive" ? "bg-gray-500" : "bg-emerald-500"
+                            }`}
+                        />
                     </div>
                     <div className="flex flex-col group-hover:opacity-80 transition-opacity min-w-0">
                         <h3 className="text-sm font-semibold text-gray-100 truncate max-w-[150px]">{displayName}</h3>
-                        <p className="text-xs text-gray-500 truncate max-w-[150px]">{displayEmail}</p>
+                        <p className="text-xs text-gray-500 truncate max-w-[150px]">{syncLabel}</p>
                     </div>
                 </div>
 

@@ -27,13 +27,15 @@ const LOCAL_STORAGE_KEYS = [
     "reminder-theme",
     "reminder_notes",
     "reminder_kanban_board",
+    "reminder-sync-key",
+    "reminder-device-id",
     // Resíduos de versões pré-vault, removidos por defensive cleanup.
     "reminder-custom-projects",
     "reminder-teams",
     "reminder-routines",
 ];
 
-const INDEXED_DB_NAMES = ["reminder-db"];
+const INDEXED_DB_NAMES = ["reminder-db", "reminder-data"];
 
 function deleteIndexedDb(dbName) {
     return new Promise((resolve) => {

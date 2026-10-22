@@ -1,6 +1,8 @@
 # ReminderONE
 
-> Assistente de produtividade pessoal com IA — NLP via Gemini, transcrição de voz local (Whisper) e integração com Google Calendar.
+Persistência durável, sincronização com Android, execução e prints: [validação local-first](docs/local-first-validacao.md).
+
+> Assistente de produtividade pessoal com IA — NLP via Gemini, transcrição de voz local (Whisper) e calendário próprio de tarefas.
 
 ---
 
@@ -15,7 +17,7 @@
 | **IA — Voz** | Faster-Whisper (CUDA / CPU) |
 | **Criptografia** | Web Crypto API (AES-GCM + PBKDF2) |
 | **Persistência** | IndexedDB (cifrada) + localStorage |
-| **Calendário** | Google Calendar API v3 (OAuth2 PKCE) |
+| **Calendário** | Agenda mensal e diária com as tarefas locais do app |
 
 ---
 
@@ -73,12 +75,9 @@ GEMINI_API_KEY=sua_chave_aqui
 
 > **⚠️ Cada desenvolvedor deve criar sua própria API key gratuita em [Google AI Studio](https://aistudio.google.com/apikey)**
 
-### 5. (Opcional) Google Calendar
+### Calendário próprio
 
-Para integração com Google Calendar:
-1. Crie credenciais OAuth no [Google Cloud Console](https://console.cloud.google.com/)
-2. Baixe o `credentials.json` e coloque em `server/`
-3. Na primeira conexão, o app abrirá o browser para autorizar
+O calendário usa as tarefas salvas no dispositivo e funciona sem conta externa ou conexão com a internet. A grade mensal abre a agenda de cada dia para consultar, editar, concluir e excluir tarefas. Depois de desbloquear o cofre, o app abre diretamente na tela Hoje, sem tutorial inicial. A configuração opcional da chave Gemini continua em Configurações.
 
 ---
 
@@ -110,11 +109,11 @@ reminderone/
 │   ├── components/         # Componentes de UI
 │   ├── contexts/           # Context providers (AppContext)
 │   ├── hooks/              # Custom hooks (useTasks, useProjects, etc.)
-│   ├── services/           # Integração com APIs (Gemini, Calendar, Whisper)
+│   ├── services/           # Persistência cifrada e APIs (Gemini, Whisper)
 │   └── utils/              # Utilitários (id, logger)
 ├── server/                 # Backend Python (FastAPI)
 │   ├── main.py             # Entry point — proxy Gemini
-│   ├── routers/            # Rotas (calendar, whisper)
+│   ├── routers/            # Transcrição Whisper
 │   ├── middleware/          # Rate limiting
 │   └── .env.example        # Template de variáveis de ambiente
 ├── src-tauri/              # App desktop Tauri (Rust)
@@ -141,8 +140,6 @@ npm run test:coverage       # Com cobertura
 | Variável | Obrigatória | Descrição |
 |---|---|---|
 | `GEMINI_API_KEY` | ✅ | Chave da API Gemini ([obter aqui](https://aistudio.google.com/apikey)) |
-| `REMINDER_LOCAL_TZ` | ❌ | Timezone (default: `America/Sao_Paulo`) |
-| `REMINDER_DEFAULT_NOTIFY_MINUTES` | ❌ | Minutos antes do lembrete no Google Calendar (default: `30`) |
 | `WHISPER_MODEL` | ❌ | Tamanho do modelo Whisper: `tiny`, `base`, `small`, `medium`, `large-v3` (default: `medium`) |
 | `WHISPER_DEVICE` | ❌ | `cuda`, `cpu` ou `auto` (default: `auto`) |
 
@@ -152,8 +149,7 @@ npm run test:coverage       # Com cobertura
 
 **NUNCA commite estes arquivos:**
 - `server/.env` — contém API keys
-- `server/credentials.json` — credenciais OAuth do Google
-- `server/token.json` — tokens de acesso pessoal
+- `server/credentials.json` e `server/token.json` — credenciais legadas, se ainda existirem
 - `src-tauri/.signing/` — chaves de assinatura
 
 Todos já estão no `.gitignore`. Se precisar verificar: `git status`

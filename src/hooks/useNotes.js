@@ -1,30 +1,17 @@
 // =============================================================
 //  useNotes.js
-//  Custom Hook — CRUD completo para anotações pessoais.
-//  Persistência cifrada via usePersistedState (AES-GCM).
+//  Custom Hook — CRUD completo das anotações, sobre o armazenamento
+//  de registros (sincronizado com o celular).
 //
-//  Cada anotação possui:
-//    - id: string (note_<timestamp>)
-//    - title: string
-//    - content: string
-//    - color: string (blue|rose|emerald|violet|amber|gray)
-//    - completed: boolean (arquivada/concluída)
-//    - createdAt: string (ISO)
-//    - updatedAt: string (ISO)
+//  Cada anotação: id, title, content, color (blue|rose|emerald|
+//  violet|amber|gray), completed, createdAt, updatedAt — e parentId,
+//  a hierarquia que o celular mostra em árvore (aqui a grade é plana).
 // =============================================================
 
-import { useCallback } from "react";
-import { usePersistedState } from "./usePersistedState";
-
-const STORAGE_KEY = "reminder_notes";
-
-function makeNoteId() {
-    return `note_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-}
-
-function nowISO() {
-    return new Date().toISOString();
-}
+import { useCallback, useMemo } from "react";
+import { useCollection, useData } from "../data/DataContext";
+import { noteToDesktop } from "../data/mappers";
+import { generateId } from "../utils/id";
 
 /**
  * @returns {{
@@ -36,45 +23,52 @@ function nowISO() {
  * }}
  */
 export function useNotes() {
-    const [notes, setNotes] = usePersistedState(STORAGE_KEY, []);
+    const { store } = useData();
+    const records = useCollection("note");
+    const notes = useMemo(
+        () => records.map(noteToDesktop).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))),
+        [records],
+    );
 
     const addNote = useCallback((data) => {
-        const now = nowISO();
-        const note = {
-            id: makeNoteId(),
+        const position = store.list("note").reduce((max, note) => Math.max(max, note.position ?? 0), 0) + 1;
+        store.write("note", `note_${generateId()}`, {
             title: data.title?.trim() || "Sem título",
             content: data.content?.trim() || "",
             color: data.color || "gray",
             completed: false,
-            createdAt: now,
-            updatedAt: now,
-        };
-        setNotes((prev) => [note, ...prev]);
-    }, [setNotes]);
+            parentId: null,
+            position,
+            createdAt: new Date().toISOString(),
+        });
+    }, [store]);
 
     const updateNote = useCallback((id, updates) => {
-        setNotes((prev) =>
-            prev.map((n) =>
-                n.id === id
-                    ? { ...n, ...updates, updatedAt: nowISO() }
-                    : n
-            )
-        );
-    }, [setNotes]);
+        if (!store.get("note", id)) return;
+        const changes = {};
+        if (updates.title !== undefined) changes.title = String(updates.title).trim() || "Sem título";
+        if (updates.content !== undefined) changes.content = String(updates.content).trim();
+        if (updates.color !== undefined) changes.color = updates.color;
+        if (updates.completed !== undefined) changes.completed = !!updates.completed;
+        store.write("note", id, changes);
+    }, [store]);
 
     const deleteNote = useCallback((id) => {
-        setNotes((prev) => prev.filter((n) => n.id !== id));
-    }, [setNotes]);
+        const note = store.get("note", id);
+        if (!note) return;
+        store.batch(() => {
+            // As filhas (criadas no celular) sobem para o pai da nota excluída.
+            for (const child of store.list("note")) {
+                if (child.parentId === id) store.write("note", child.id, { parentId: note.parentId ?? null });
+            }
+            store.remove("note", id);
+        });
+    }, [store]);
 
     const toggleNoteCompletion = useCallback((id) => {
-        setNotes((prev) =>
-            prev.map((n) =>
-                n.id === id
-                    ? { ...n, completed: !n.completed, updatedAt: nowISO() }
-                    : n
-            )
-        );
-    }, [setNotes]);
+        const note = store.get("note", id);
+        if (note) store.write("note", id, { completed: !note.completed });
+    }, [store]);
 
     return { notes, addNote, updateNote, deleteNote, toggleNoteCompletion };
 }

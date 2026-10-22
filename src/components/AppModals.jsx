@@ -8,18 +8,17 @@ import { Toaster } from "react-hot-toast";
 import { useAppContext } from "../contexts/AppContext";
 
 // Modals
-import { WeeklyReportModal } from "./WeeklyReportModal";
 import { SearchModal } from "./SearchModal";
 import { QuickAddModal } from "./QuickAddModal";
 import { SmartInput } from "./SmartInput";
 import { MentionMenu } from "./MentionMenu";
 import { TaskEditModal } from "./modals/TaskEditModal";
+import { TaskCreateModal } from "./modals/TaskCreateModal";
 import { NewProjectModal, EditProjectModal } from "./modals/ProjectModals";
 // TeamModals removed — Teams feature not in v0.1.0
 import { NewRoutineModal, EditRoutineModal } from "./modals/RoutineModals";
 import { CalendarDayModal } from "./modals/CalendarDayModal";
 import { NoteModal } from "./modals/NoteModal";
-import { OnboardingWizard } from "./onboarding/OnboardingWizard";
 
 export function AppModals() {
     const ctx = useAppContext();
@@ -45,7 +44,6 @@ export function AppModals() {
             </QuickAddModal>
 
             <SearchModal isOpen={ctx.isSearchOpen} onClose={() => ctx.setIsSearchOpen(false)} tasks={ctx.tasks} onNavigate={ctx.navigate} />
-            <WeeklyReportModal isOpen={ctx.showWeeklyReport} onClose={() => ctx.setShowWeeklyReport(false)} tasks={ctx.tasks} />
 
             {/* Task Edit */}
             <TaskEditModal
@@ -53,6 +51,15 @@ export function AppModals() {
                 onClose={() => ctx.setEditingTask(null)}
                 onSave={ctx.handleTaskEditSave}
                 onDelete={ctx.handleTaskEditDelete}
+                projects={ctx.projects}
+                onCreateNewProject={() => ctx.setIsNewProjectOpen(true)}
+            />
+
+            {/* Task Create */}
+            <TaskCreateModal
+                isOpen={ctx.isCreateTaskOpen}
+                onClose={() => ctx.setIsCreateTaskOpen(false)}
+                onSave={ctx.handleTaskCreate}
                 projects={ctx.projects}
                 onCreateNewProject={() => ctx.setIsNewProjectOpen(true)}
             />
@@ -125,10 +132,6 @@ export function AppModals() {
                 }}
             />
 
-            {/* Onboarding wizard — first-time setup only */}
-            {ctx.showOnboarding && (
-                <OnboardingWizard onComplete={() => ctx.setShowOnboarding(false)} />
-            )}
         </>
     );
 }

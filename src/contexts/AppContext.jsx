@@ -25,10 +25,10 @@ import { useKeyboardShortcuts } from "../hooks/useKeyboardShortcuts";
 import { useVault } from "../components/vault/VaultContext";
 import { useRoutineNotifications } from "../hooks/useRoutineNotifications";
 import { useTheme } from "../hooks/useTheme";
-import { useKanbanBoard } from "../hooks/useKanbanBoard";
+import { useCollection, useData } from "../data/DataContext";
+import { localDateISO } from "../data/mappers";
 
-// Onboarding & Gemini key
-import { isOnboardingDone, loadGeminiKey } from "../components/onboarding/OnboardingWizard";
+import { loadGeminiKey } from "../services/geminiKeyStorage";
 import { setGeminiApiKey } from "../services/geminiService";
 
 const AppContext = createContext(null);
@@ -50,7 +50,7 @@ function getFormattedDate() {
 
 function filterTasksByView(tasks, filter, projects) {
     switch (filter) {
-        case "hoje": return tasks.filter((t) => t.date === new Date().toISOString().split("T")[0]);
+        case "hoje": return tasks.filter((t) => t.date === localDateISO());
         case "entrada": return tasks.filter((t) => t.project === "Entrada");
         case "ideias_produto": return tasks.filter((t) => t.project === "Ideias de Produto");
         default: {
@@ -72,7 +72,7 @@ function useAppProvider() {
     const themeCtx = useTheme();
 
     // ── Vault key + Gemini key ──
-    const { key: vaultKey, lock } = useVault();
+    const { key: vaultKey, lock, profile, updateProfile } = useVault();
     useEffect(() => {
         if (!vaultKey) return;
         loadGeminiKey(vaultKey).then((apiKey) => {
@@ -80,13 +80,26 @@ function useAppProvider() {
         });
     }, [vaultKey]);
 
-    // ── Kanban ──
-    const { board: kanbanBoard, actions: kanbanActions } = useKanbanBoard();
+    // ── Perfil: o mesmo nos dois apps (registro "me") ──
+    const { store } = useData();
+    const profileRecords = useCollection("profile");
+    useEffect(() => {
+        const synced = profileRecords.find((record) => record.id === "me");
+        if (!synced) return;
+        if (synced.name !== (profile?.name ?? "") || synced.email !== (profile?.email ?? "")) {
+            updateProfile({ name: synced.name ?? "", email: synced.email ?? "" });
+        }
+    }, [profileRecords, profile, updateProfile]);
+
+    const saveProfile = useCallback((next) => {
+        updateProfile(next);
+        store.write("profile", "me", { name: next.name ?? "", email: next.email ?? "" });
+    }, [store, updateProfile]);
 
     // ── Domain hooks ──
     const {
-        tasks, isAnalyzing, addTaskFromText, toggleTask,
-        updateTask, deleteTask, generateSubtasks, toggleSubtask, resyncWithCalendar,
+        tasks, isAnalyzing, addTaskFromText, addTaskManual, toggleTask,
+        updateTask, deleteTask, generateSubtasks, toggleSubtask,
     } = useTasks();
 
     const {
@@ -116,28 +129,7 @@ function useAppProvider() {
 
     const { isMenuOpen, handleInputChange, selectMember, closeMenu } = useMention(inputValue, setInputValue, inputRef);
 
-    // ── Calendar resync ──
-    const [isResyncing, setIsResyncing] = useState(false);
-    const handleResyncCalendar = useCallback(async () => {
-        if (isResyncing) return;
-        setIsResyncing(true);
-        const toastId = toast.loading("Re-sincronizando com Google Calendar...");
-        try {
-            const { synced, failed } = await resyncWithCalendar();
-            if (synced === 0 && failed === 0) {
-                toast.success("Tudo já está sincronizado.", { id: toastId });
-            } else if (failed === 0) {
-                toast.success(`${synced} tarefa(s) sincronizada(s).`, { id: toastId });
-            } else {
-                toast.error(`${synced} ok, ${failed} falharam. Verifique a conexão.`, { id: toastId });
-            }
-        } finally {
-            setIsResyncing(false);
-        }
-    }, [isResyncing, resyncWithCalendar]);
-
     // ── UI state: modais e panels ──
-    const [showWeeklyReport, setShowWeeklyReport] = useState(false);
     const [isSearchOpen, setIsSearchOpen] = useState(false);
     const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
 
@@ -146,12 +138,12 @@ function useAppProvider() {
     const [isNewProjectOpen, setIsNewProjectOpen] = useState(false);
     const [editingProject, setEditingProject] = useState(null);
     // Teams modal state removed — v0.1.0
+    const [isCreateTaskOpen, setIsCreateTaskOpen] = useState(false);
     const [isNewRoutineOpen, setIsNewRoutineOpen] = useState(false);
     const [editingRoutine, setEditingRoutine] = useState(null);
     const [selectedCalendarDate, setSelectedCalendarDate] = useState(null);
     const [isNoteModalOpen, setIsNoteModalOpen] = useState(false);
     const [editingNote, setEditingNote] = useState(null);
-    const [showOnboarding, setShowOnboarding] = useState(() => !isOnboardingDone());
 
     // ── Keyboard shortcuts ──
     useKeyboardShortcuts([
@@ -194,15 +186,38 @@ function useAppProvider() {
     };
 
     // ── CRUD handlers ──
-    const handleTaskEditSave = useCallback((id, updates) => {
-        updateTask(id, updates); setEditingTask(null);
-        toast.success("Tarefa atualizada", { duration: 2000 });
-    }, [updateTask]);
+    const handleTaskCreate = useCallback(async (taskFields) => {
+        await addTaskManual(taskFields);
+        setIsCreateTaskOpen(false);
+        try {
+            await store.flushed();
+            toast.success("Tarefa criada e salva neste dispositivo", { duration: 2000 });
+        } catch {
+            toast.error("A tarefa está pendente de gravação. Use Tentar novamente no aviso.");
+        }
+    }, [addTaskManual, store]);
 
-    const handleTaskEditDelete = useCallback((id) => {
-        deleteTask(id); setEditingTask(null);
-        toast.success("Tarefa excluída", { duration: 2000 });
-    }, [deleteTask]);
+    const handleTaskEditSave = useCallback(async (id, updates) => {
+        updateTask(id, updates);
+        try {
+            await store.flushed();
+            setEditingTask(null);
+            toast.success("Tarefa atualizada", { duration: 2000 });
+        } catch {
+            toast.error("A alteração ainda não foi salva. Use Tentar novamente no aviso.");
+        }
+    }, [updateTask, store]);
+
+    const handleTaskEditDelete = useCallback(async (id) => {
+        deleteTask(id);
+        try {
+            await store.flushed();
+            setEditingTask(null);
+            toast.success("Tarefa excluída", { duration: 2000 });
+        } catch {
+            toast.error("A exclusão ainda não foi salva. Use Tentar novamente no aviso.");
+        }
+    }, [deleteTask, store]);
 
     const handleNewProject = useCallback((proj) => {
         addProject(proj); setIsNewProjectOpen(false);
@@ -285,14 +300,12 @@ function useAppProvider() {
         routines, toggleRoutineToday,
         // Notes
         notes, toggleNoteCompletion,
-        // Kanban
-        kanbanBoard, kanbanActions,
-        // Calendar resync
-        handleResyncCalendar, isResyncing,
+        // Perfil
+        saveProfile,
         // UI state — modals
-        showWeeklyReport, setShowWeeklyReport,
         isSearchOpen, setIsSearchOpen,
         isQuickAddOpen, setIsQuickAddOpen,
+        isCreateTaskOpen, setIsCreateTaskOpen,
         editingTask, setEditingTask,
         isNewProjectOpen, setIsNewProjectOpen,
         editingProject, setEditingProject,
@@ -301,8 +314,8 @@ function useAppProvider() {
         selectedCalendarDate, setSelectedCalendarDate,
         isNoteModalOpen, setIsNoteModalOpen,
         editingNote, setEditingNote,
-        showOnboarding, setShowOnboarding,
         // CRUD handlers
+        handleTaskCreate,
         handleTaskEditSave, handleTaskEditDelete,
         handleNewProject, handleEditProjectSave, handleDeleteProject,
 

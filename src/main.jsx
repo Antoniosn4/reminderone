@@ -4,6 +4,7 @@ import App from "./App.jsx";
 import { VaultProvider } from "./components/vault/VaultContext.jsx";
 import { VaultGate } from "./components/vault/VaultGate.jsx";
 import { ErrorBoundary } from "./components/ErrorBoundary.jsx";
+import { DataProvider } from "./data/DataContext.jsx";
 import "./index.css";
 
 ReactDOM.createRoot(document.getElementById("root")).render(
@@ -11,7 +12,9 @@ ReactDOM.createRoot(document.getElementById("root")).render(
         <ErrorBoundary>
             <VaultProvider>
                 <VaultGate>
-                    <App />
+                    <DataProvider>
+                        <App />
+                    </DataProvider>
                 </VaultGate>
             </VaultProvider>
         </ErrorBoundary>

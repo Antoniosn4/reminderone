@@ -36,10 +36,10 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    # Hardening: bind explicito em loopback. Recusa qualquer pedido
-    # para escutar em 0.0.0.0 vindo dos argumentos.
-    host = "127.0.0.1" if args.host in {"0.0.0.0", "::", ""} else args.host
-    uvicorn.run(app, host=host, port=args.port, log_level="warning")
+    # O app desktop pede 0.0.0.0 para o celular sincronizar pela rede. A
+    # proteção é o middleware `lan_guard` de main.py: fora desta máquina,
+    # só entra quem tem o token de sincronização.
+    uvicorn.run(app, host=args.host or "127.0.0.1", port=args.port, log_level="warning")
 
 
 if __name__ == "__main__":

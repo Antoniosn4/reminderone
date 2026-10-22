@@ -5,13 +5,14 @@
 // =============================================================
 
 import { useMemo } from "react";
-import { Check } from "lucide-react";
+import { Check, Pencil } from "lucide-react";
 import { renderIcon } from "../../constants/renderIcon";
+import { localDateISO } from "../../data/mappers";
 
 const WEEK_DAYS_LABELS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
 
 function isoDayOf(date) {
-    return date.toISOString().split("T")[0];
+    return localDateISO(date);
 }
 
 /**
@@ -43,20 +44,30 @@ function buildWeekHistory(completedDates) {
  * @param {{
  *   routine: object,
  *   onToggleToday?: (id: string) => void,
+ *   onEdit?: (routine: object) => void,
  * }} props
  */
-export function GenericRoutineView({ routine, onToggleToday }) {
-    if (!routine) return null;
-
+export function GenericRoutineView({ routine, onToggleToday, onEdit }) {
     const history = useMemo(
-        () => buildWeekHistory(routine.completedDates),
-        [routine.completedDates],
+        () => buildWeekHistory(routine?.completedDates),
+        [routine?.completedDates],
     );
+    // Depois dos hooks: a rotina pode sumir (excluída no celular) com a tela aberta.
+    if (!routine) return null;
     const isDoneToday = history[history.length - 1]?.isDone ?? false;
 
     return (
         <div className="max-w-2xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4">
             <div className="bg-gray-800 border border-gray-700 rounded-3xl p-8 shadow-2xl flex flex-col items-center text-center relative overflow-hidden">
+                {onEdit && (
+                    <button
+                        onClick={() => onEdit(routine)}
+                        title="Editar rotina"
+                        className="absolute top-4 right-4 flex items-center gap-1.5 text-xs font-semibold text-gray-400 hover:text-gray-100 bg-gray-900 hover:bg-gray-700 border border-gray-700 px-3 py-1.5 rounded-lg transition-colors"
+                    >
+                        <Pencil className="w-3.5 h-3.5" /> Editar
+                    </button>
+                )}
                 <div className="w-20 h-20 bg-gray-900 border border-gray-700 rounded-full flex items-center justify-center mb-6 shadow-lg">
                     {renderIcon(routine.icon, `w-10 h-10 ${routine.color}`)}
                 </div>

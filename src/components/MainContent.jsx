@@ -6,8 +6,9 @@
 // =============================================================
 
 import {
-    BarChart2, CheckCircle2, Star, History,
+    CheckCircle2, Star, History,
     AlertCircle, Calendar, StickyNote, KanbanSquare,
+    PlusCircle,
 } from "lucide-react";
 
 import { useAppContext } from "../contexts/AppContext";
@@ -16,7 +17,6 @@ import { useAppContext } from "../contexts/AppContext";
 import { SmartInput } from "./SmartInput";
 import { MentionMenu } from "./MentionMenu";
 import { TaskItem } from "./TaskList/TaskItem";
-import { AccountButton } from "./AccountButton";
 
 // Views
 import { CalendarView } from "./views/CalendarView";
@@ -52,15 +52,11 @@ export function MainContent() {
         // Tasks
         pendingTasks, completedTasks, taskHandlers,
         // Calendar
-        handleResyncCalendar, isResyncing, setSelectedCalendarDate,
+        setSelectedCalendarDate,
         // Notes
         notes, toggleNoteCompletion, setEditingNote, setIsNoteModalOpen,
-        // Kanban
-        kanbanBoard, kanbanActions,
         // Routines
         toggleRoutineToday,
-        // UI
-        setShowWeeklyReport,
         // Helpers
         getFormattedDate,
     } = ctx;
@@ -90,14 +86,15 @@ export function MainContent() {
                 </div>
                 <div className="flex items-center gap-3">
                     {activeView !== "settings" && !activeView.startsWith("routine_") && (
-                        <button
-                            onClick={() => setShowWeeklyReport(true)}
-                            className="flex items-center gap-2 text-xs font-semibold text-indigo-400 bg-gray-800 hover:bg-gray-700 px-3 py-1.5 rounded-lg border border-gray-700 transition-colors"
-                        >
-                            <BarChart2 className="w-4 h-4" /> Resumo
-                        </button>
+                        <>
+                            <button
+                                onClick={() => ctx.setIsCreateTaskOpen(true)}
+                                className="flex items-center gap-2 text-xs font-semibold text-emerald-400 bg-gray-800 hover:bg-gray-700 px-3 py-1.5 rounded-lg border border-gray-700 transition-colors"
+                            >
+                                <PlusCircle className="w-4 h-4" /> Nova Tarefa
+                            </button>
+                        </>
                     )}
-                    <AccountButton onResyncCalendar={handleResyncCalendar} isResyncing={isResyncing} />
                 </div>
             </header>
 
@@ -180,14 +177,18 @@ export function MainContent() {
                 const routine = routines.find((r) => r.id === activeView);
                 return (
                     <div className="flex-1 overflow-y-auto custom-scrollbar px-10 pb-20 w-full max-w-5xl mx-auto">
-                        <GenericRoutineView routine={routine} onToggleToday={toggleRoutineToday} />
+                        <GenericRoutineView
+                            routine={routine}
+                            onToggleToday={toggleRoutineToday}
+                            onEdit={ctx.setEditingRoutine}
+                        />
                     </div>
                 );
             })()}
 
             {viewType === "kanban" && (
                 <div className="flex-1 overflow-hidden px-6 pb-6 w-full">
-                    <KanbanView board={kanbanBoard} actions={kanbanActions} />
+                    <KanbanView />
                 </div>
             )}
 

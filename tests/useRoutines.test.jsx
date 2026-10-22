@@ -1,35 +1,22 @@
 // =============================================================
 //  useRoutines.test.jsx
 //  Garante o ciclo de vida das rotinas: add, update, delete e
-//  toggleRoutineToday persistindo `completedDates` corretamente.
+//  toggleRoutineToday gravando `completedDates` (dia local).
 // =============================================================
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { act, renderHook, waitFor } from "@testing-library/react";
-
-vi.mock("../src/components/vault/VaultContext", () => ({
-    useVault: () => ({ key: { fake: true } }),
-}));
-
-vi.mock("../src/services/secureLocalStorage", () => ({
-    readEncrypted: vi.fn(async (_key, _storageKey, fallback) => fallback),
-    writeEncrypted: vi.fn(async () => {}),
-}));
-
+import { describe, it, expect } from "vitest";
+import { act } from "@testing-library/react";
 import { useRoutines } from "../src/hooks/useRoutines";
+import { localDateISO } from "../src/data/mappers";
+import { renderDataHook } from "./support/renderWithData";
 
-const TODAY_ISO = new Date().toISOString().split("T")[0];
+const TODAY_ISO = localDateISO();
 
 async function setup() {
-    const view = renderHook(() => useRoutines());
-    // Hook hidrata para [] por padrão; aguarda o estado sincronizar.
-    await waitFor(() => expect(Array.isArray(view.result.current.routines)).toBe(true));
-    return view;
+    return renderDataHook(() => useRoutines());
 }
 
 describe("useRoutines", () => {
-    beforeEach(() => vi.clearAllMocks());
-
     it("começa vazio (sem rotinas mockadas)", async () => {
         const { result } = await setup();
         expect(result.current.routines).toEqual([]);

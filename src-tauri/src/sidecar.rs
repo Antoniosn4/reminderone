@@ -5,7 +5,9 @@
 //
 //  - O binário é resolvido pela API do Tauri (`shell.sidecar`),
 //    que aplica o sufixo de plataforma (-x86_64-pc-windows-msvc.exe).
-//  - Bind sempre em 127.0.0.1 (nunca exposto à rede).
+//  - Bind em 0.0.0.0: o celular sincroniza pela rede local. Fora
+//    desta máquina, o servidor só atende quem tem o token de
+//    sincronização (server/main.py, middleware `lan_guard`).
 //  - Logs do sidecar são silenciados em release.
 // =============================================================
 
@@ -21,7 +23,7 @@ pub struct SidecarState(pub Mutex<Option<CommandChild>>);
 pub fn start_server(app: AppHandle) {
     let shell = app.shell();
     let command = match shell.sidecar("reminder-server") {
-        Ok(cmd) => cmd.args(["--host", "127.0.0.1", "--port", "8000"]),
+        Ok(cmd) => cmd.args(["--host", "0.0.0.0", "--port", "8000"]),
         Err(err) => {
             eprintln!("[sidecar] não encontrado: {err}");
             return;

@@ -13,6 +13,8 @@
 
 # -*- mode: python ; coding: utf-8 -*-
 
+from PyInstaller.utils.hooks import collect_data_files
+
 block_cipher = None
 
 hidden_imports = [
@@ -30,25 +32,17 @@ hidden_imports = [
     "fastapi",
     "starlette",
     "pydantic",
-    "tzdata",
     "faster_whisper",
-    "google.oauth2",
-    "google.oauth2.credentials",
-    "google_auth_oauthlib",
-    "googleapiclient",
-    "googleapiclient.discovery",
 ]
 
 a = Analysis(
     ["entrypoint.py"],
     pathex=["."],
     binaries=[],
-    datas=[
-        # credentials.json embutido no binário: o app não precisa que o usuário
-        # copie o arquivo manualmente após instalar. O token OAuth (token.json)
-        # ainda é gerado em %LOCALAPPDATA%\Reminder1\ na primeira autenticação.
-        ("credentials.json", "."),
-    ],
+    # O faster-whisper carrega o detector de voz (VAD) de um arquivo do
+    # pacote, `faster_whisper/assets/silero_vad_v6.onnx`. Sem ele, toda
+    # transcrição da sidecar falha com NO_SUCHFILE.
+    datas=collect_data_files("faster_whisper"),
     hiddenimports=hidden_imports,
     hookspath=[],
     hooksconfig={},
