@@ -11,15 +11,12 @@
 
 import { useRef, useEffect, useState } from "react";
 import { Mic, Plus, Send, Loader2, X, Check, MicOff } from "lucide-react";
+import { VOICE_STRATEGY } from "../hooks/useVoiceRecording";
 
-/** Detecta suporte a voz: Web Speech API (primário) ou MediaRecorder (fallback Whisper). */
-const IS_VOICE_SUPPORTED = typeof navigator !== "undefined" && (
-    !!(window.SpeechRecognition || window.webkitSpeechRecognition) ||
-    (typeof navigator.mediaDevices?.getUserMedia === "function" && typeof window.MediaRecorder !== "undefined")
-);
+/** Voz disponível: Whisper local (gravação) ou, sem gravação, Web Speech API. */
+const IS_VOICE_SUPPORTED = VOICE_STRATEGY !== null;
 
-const IS_SPEECH_RECOGNITION = typeof window !== "undefined" &&
-    !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+const IS_SPEECH_RECOGNITION = VOICE_STRATEGY === "speech";
 
 /** Número de barras no waveform visual. */
 const BAR_COUNT = 9;

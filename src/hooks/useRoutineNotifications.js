@@ -14,6 +14,7 @@
 
 import { useEffect, useRef } from "react";
 import { logger } from "../utils/logger";
+import { localDateISO } from "../data/mappers";
 
 const TICK_INTERVAL_MS = 60_000;
 const HHMM_REGEX = /^([01]?\d|2[0-3]):[0-5]\d$/;
@@ -21,7 +22,7 @@ const SESSION_KEY_PREFIX = "reminder-routine-fired";
 const NOTIFICATION_ICON = "/logonova.png";
 
 function todayKey() {
-    return new Date().toISOString().split("T")[0];
+    return localDateISO();
 }
 
 function alreadyFiredToday(routineId) {

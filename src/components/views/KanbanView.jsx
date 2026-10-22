@@ -1,14 +1,18 @@
 // =============================================================
 //  KanbanView.jsx
-//  Quadro Kanban completo — DnD via @hello-pangea/dnd,
-//  CRUD de colunas e cartões, edição inline.
+//  Kanban em pastas: a grade de pastas (cards como "Tráfego pago")
+//  e, ao abrir uma, o quadro dela — DnD via @hello-pangea/dnd, CRUD
+//  de colunas e cartões, edição inline. Tudo sincroniza com o celular.
 // =============================================================
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import {
     Plus, GripVertical, Trash2, MoreHorizontal, X, Pencil,
+    ArrowLeft, FolderOpen, ChevronLeft, ChevronRight,
 } from "lucide-react";
+import { useKanbanBoard, useKanbanFolders } from "../../hooks/useKanban";
+import { ConfirmModal } from "../modals/ConfirmModal";
 
 const CARD_COLORS = [
     null,
@@ -367,9 +371,9 @@ function KanbanColumn({ column, cards, index, actions }) {
     );
 }
 
-// ── Main Kanban View ─────────────────────────────────────────
+// ── Board (DnD) ──────────────────────────────────────────────
 
-export function KanbanView({ board, actions }) {
+function KanbanBoard({ board, actions }) {
     const handleDragEnd = useCallback((result) => {
         const { source, destination, type } = result;
         if (!destination) return;
@@ -427,5 +431,247 @@ export function KanbanView({ board, actions }) {
                 )}
             </Droppable>
         </DragDropContext>
+    );
+}
+
+// ── Pastas ──────────────────────────────────────────────────
+
+const FOLDER_COLORS = [null, "#8b5cf6", "#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#ec4899", "#06b6d4"];
+
+function ColorDots({ value, onChange }) {
+    return (
+        <div className="flex gap-1.5 flex-wrap">
+            {FOLDER_COLORS.map((color) => (
+                <button
+                    key={color ?? "none"}
+                    type="button"
+                    onClick={() => onChange(color)}
+                    title={color ?? "Sem cor"}
+                    className={`w-6 h-6 rounded-full border-2 transition-all ${
+                        color === value ? "border-white scale-110" : "border-transparent hover:scale-110"
+                    }`}
+                    style={{ background: color || "rgb(var(--gray-700))" }}
+                />
+            ))}
+        </div>
+    );
+}
+
+/** Formulário de nome + cor, usado para criar e para renomear uma pasta. */
+function FolderForm({ initialName = "", initialColor = null, submitLabel, onSubmit, onCancel }) {
+    const [name, setName] = useState(initialName);
+    const [color, setColor] = useState(initialColor);
+    const inputRef = useRef(null);
+    useEffect(() => { inputRef.current?.focus(); }, []);
+
+    const submit = () => {
+        if (name.trim()) onSubmit(name.trim(), color);
+    };
+
+    return (
+        <div className="bg-gray-800 border border-gray-600 rounded-2xl p-4 space-y-3 shadow-lg">
+            <input
+                ref={inputRef}
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                onKeyDown={(e) => {
+                    if (e.key === "Enter") submit();
+                    if (e.key === "Escape") onCancel();
+                }}
+                maxLength={60}
+                placeholder="Nome da pasta (ex.: Tráfego pago)"
+                aria-label="Nome da pasta"
+                className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm text-gray-100 placeholder-gray-500 outline-none focus:border-gray-500"
+            />
+            <ColorDots value={color} onChange={setColor} />
+            <div className="flex items-center gap-2">
+                <button
+                    onClick={submit}
+                    disabled={!name.trim()}
+                    className="bg-violet-600 hover:bg-violet-500 disabled:opacity-40 text-white text-xs font-semibold px-4 py-1.5 rounded-lg transition-colors"
+                >
+                    {submitLabel}
+                </button>
+                <button onClick={onCancel} className="text-xs text-gray-400 hover:text-gray-200 px-2 py-1.5">
+                    Cancelar
+                </button>
+            </div>
+        </div>
+    );
+}
+
+function FolderCard({ folder, onOpen, onRename, onMove, onDelete, isFirst, isLast }) {
+    const tint = folder.color || "#8b5cf6";
+    return (
+        <div className="group relative bg-gray-800 border border-gray-700 hover:border-gray-600 rounded-2xl overflow-hidden transition-colors">
+            <div className="h-1.5" style={{ background: tint }} />
+            <button onClick={onOpen} className="w-full text-left p-5" title="Abrir o quadro">
+                <div className="w-11 h-11 rounded-xl flex items-center justify-center mb-4" style={{ background: `${tint}22` }}>
+                    <FolderOpen className="w-6 h-6" style={{ color: tint }} />
+                </div>
+                <h3 className="text-base font-bold text-gray-100 line-clamp-2">{folder.name}</h3>
+                <p className="text-xs text-gray-500 mt-1">
+                    {folder.columnCount} {folder.columnCount === 1 ? "coluna" : "colunas"} · {folder.cardCount}{" "}
+                    {folder.cardCount === 1 ? "cartão" : "cartões"}
+                </p>
+            </button>
+            <div className="absolute top-4 right-3 flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button onClick={() => onMove("back")} disabled={isFirst} title="Mover para a esquerda" className="p-1.5 rounded-lg text-gray-500 hover:text-gray-200 hover:bg-gray-700 disabled:opacity-30">
+                    <ChevronLeft className="w-4 h-4" />
+                </button>
+                <button onClick={() => onMove("forward")} disabled={isLast} title="Mover para a direita" className="p-1.5 rounded-lg text-gray-500 hover:text-gray-200 hover:bg-gray-700 disabled:opacity-30">
+                    <ChevronRight className="w-4 h-4" />
+                </button>
+                <button onClick={onRename} title="Renomear e cor" className="p-1.5 rounded-lg text-gray-500 hover:text-gray-200 hover:bg-gray-700">
+                    <Pencil className="w-4 h-4" />
+                </button>
+                <button onClick={onDelete} title="Excluir pasta" className="p-1.5 rounded-lg text-gray-500 hover:text-rose-400 hover:bg-gray-700">
+                    <Trash2 className="w-4 h-4" />
+                </button>
+            </div>
+        </div>
+    );
+}
+
+function FolderBoard({ boardId, onBack, onRename, onDelete }) {
+    const { folder, board, actions } = useKanbanBoard(boardId);
+    const [editing, setEditing] = useState(false);
+    if (!folder) return null;
+    return (
+        <div className="h-full flex flex-col min-h-0">
+            <div className="flex items-center gap-3 pb-4 flex-shrink-0">
+                <button
+                    onClick={onBack}
+                    className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-gray-100 bg-gray-800 hover:bg-gray-700 border border-gray-700 px-3 py-1.5 rounded-lg transition-colors"
+                >
+                    <ArrowLeft className="w-4 h-4" /> Pastas
+                </button>
+                {editing ? (
+                    <div className="w-[360px]">
+                        <FolderForm
+                            initialName={folder.name}
+                            initialColor={folder.color ?? null}
+                            submitLabel="Salvar"
+                            onSubmit={(name, color) => { onRename(folder.id, name, color); setEditing(false); }}
+                            onCancel={() => setEditing(false)}
+                        />
+                    </div>
+                ) : (
+                    <>
+                        <span className="w-3 h-3 rounded-full" style={{ background: folder.color || "#8b5cf6" }} />
+                        <h2 className="text-xl font-bold text-gray-100">{folder.name}</h2>
+                        <button onClick={() => setEditing(true)} title="Renomear e cor" className="p-1.5 rounded-lg text-gray-500 hover:text-gray-200 hover:bg-gray-800">
+                            <Pencil className="w-4 h-4" />
+                        </button>
+                        <button onClick={() => onDelete(folder)} title="Excluir pasta" className="p-1.5 rounded-lg text-gray-500 hover:text-rose-400 hover:bg-gray-800">
+                            <Trash2 className="w-4 h-4" />
+                        </button>
+                    </>
+                )}
+            </div>
+            <div className="flex-1 min-h-0">
+                <KanbanBoard board={board} actions={actions} />
+            </div>
+        </div>
+    );
+}
+
+/**
+ * Tela Kanban: as pastas do usuário; clicar numa abre o quadro dela.
+ * Sincroniza com o celular (entidades kanban_board/column/card).
+ */
+export function KanbanView() {
+    const { folders, createBoard, updateBoard, moveBoard, removeBoard } = useKanbanFolders();
+    const [openId, setOpenId] = useState(null);
+    const [creating, setCreating] = useState(false);
+    const [renamingId, setRenamingId] = useState(null);
+    const [toDelete, setToDelete] = useState(null);
+
+    const open = openId && folders.some((folder) => folder.id === openId) ? openId : null;
+
+    const confirm = (
+        <ConfirmModal
+            isOpen={toDelete !== null}
+            title={`Excluir "${toDelete?.name ?? ""}"?`}
+            description="As colunas e os cartões da pasta também serão excluídos, aqui e no celular."
+            confirmLabel="Excluir"
+            variant="danger"
+            onConfirm={() => {
+                removeBoard(toDelete.id);
+                if (openId === toDelete.id) setOpenId(null);
+                setToDelete(null);
+            }}
+            onCancel={() => setToDelete(null)}
+        />
+    );
+
+    if (open) {
+        return (
+            <>
+                <FolderBoard
+                    boardId={open}
+                    onBack={() => setOpenId(null)}
+                    onRename={(id, name, color) => updateBoard(id, { name, color })}
+                    onDelete={setToDelete}
+                />
+                {confirm}
+            </>
+        );
+    }
+
+    return (
+        <div className="h-full overflow-y-auto custom-scrollbar">
+            <div className="flex items-center justify-between pb-5">
+                <p className="text-sm text-gray-400">Suas pastas de projetos. Clique numa pasta para abrir o quadro.</p>
+                <button
+                    onClick={() => setCreating(true)}
+                    className="flex items-center gap-2 text-sm font-semibold text-white bg-violet-600 hover:bg-violet-500 px-4 py-2 rounded-lg transition-colors"
+                >
+                    <Plus className="w-4 h-4" /> Nova pasta
+                </button>
+            </div>
+
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-4 pb-8">
+                {creating && (
+                    <FolderForm
+                        submitLabel="Criar"
+                        onSubmit={(name, color) => { createBoard(name, color); setCreating(false); }}
+                        onCancel={() => setCreating(false)}
+                    />
+                )}
+                {folders.map((folder, index) =>
+                    renamingId === folder.id ? (
+                        <FolderForm
+                            key={folder.id}
+                            initialName={folder.name}
+                            initialColor={folder.color}
+                            submitLabel="Salvar"
+                            onSubmit={(name, color) => { updateBoard(folder.id, { name, color }); setRenamingId(null); }}
+                            onCancel={() => setRenamingId(null)}
+                        />
+                    ) : (
+                        <FolderCard
+                            key={folder.id}
+                            folder={folder}
+                            isFirst={index === 0}
+                            isLast={index === folders.length - 1}
+                            onOpen={() => setOpenId(folder.id)}
+                            onRename={() => setRenamingId(folder.id)}
+                            onMove={(direction) => moveBoard(folder.id, direction)}
+                            onDelete={() => setToDelete(folder)}
+                        />
+                    ),
+                )}
+            </div>
+
+            {folders.length === 0 && !creating && (
+                <div className="text-center py-16 text-gray-500 flex flex-col items-center">
+                    <FolderOpen className="w-12 h-12 mb-3 opacity-30" />
+                    <p className="font-semibold text-gray-400">Nenhuma pasta ainda</p>
+                    <p className="text-sm mt-1">Crie uma pasta como “Tráfego pago” para organizar um quadro Kanban.</p>
+                </div>
+            )}
+            {confirm}
+        </div>
     );
 }

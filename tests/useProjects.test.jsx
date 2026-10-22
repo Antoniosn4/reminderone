@@ -1,35 +1,23 @@
 // =============================================================
 //  useProjects.test.jsx
-//  Cobre o pipeline CRUD de projetos e sub-projetos, incluindo
-//  detecção de duplicados (case-insensitive) e idempotência.
-//  Mocks isolam a camada cifrada para que o teste não dependa
-//  do WebCrypto nem do VaultContext.
+//  Cobre o CRUD de projetos e sub-projetos sobre o armazenamento de
+//  registros (sincronizado), incluindo duplicados (case-insensitive)
+//  e a ida das tarefas para a Entrada quando o projeto sai.
 // =============================================================
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { act, renderHook, waitFor } from "@testing-library/react";
-
-vi.mock("../src/components/vault/VaultContext", () => ({
-    useVault: () => ({ key: { fake: true } }),
-}));
-
-vi.mock("../src/services/secureLocalStorage", () => ({
-    readEncrypted: vi.fn(async (_key, _storageKey, fallback) => fallback),
-    writeEncrypted: vi.fn(async () => {}),
-}));
-
+import { describe, it, expect } from "vitest";
+import { act } from "@testing-library/react";
 import { useProjects } from "../src/hooks/useProjects";
+import { renderDataHook } from "./support/renderWithData";
 
 async function setup() {
-    const view = renderHook(() => useProjects());
-    // Aguarda hidratação assíncrona do usePersistedState.
-    await waitFor(() => expect(view.result.current.projects.length).toBeGreaterThan(0));
-    return view;
+    return renderDataHook(() => useProjects());
 }
 
 describe("useProjects", () => {
-    beforeEach(() => {
-        vi.clearAllMocks();
+    it("começa sem projetos (sem os exemplos de antes)", async () => {
+        const { result } = await setup();
+        expect(result.current.projects).toEqual([]);
     });
 
     it("adiciona um novo projeto com label e cor padrão", async () => {
@@ -107,5 +95,22 @@ describe("useProjects", () => {
         act(() => result.current.removeSubProject(parent.id, sub.id));
         const after = result.current.projects.find((p) => p.id === parent.id).subProjects;
         expect(after.find((s) => s.id === sub.id)).toBeUndefined();
+    });
+
+    it("excluir projeto exclui os subprojetos e manda as tarefas para a Entrada", async () => {
+        const { result, store } = await setup();
+        act(() => result.current.addProject({ label: "Viagem" }));
+        const parent = result.current.projects.at(-1);
+        act(() => result.current.addSubProject(parent.id, "Passagens"));
+        const sub = result.current.projects.at(-1).subProjects[0];
+        act(() => {
+            store.write("task", "t1", { title: "Comprar passagem", projectId: sub.id });
+        });
+
+        act(() => result.current.removeProject(parent.id));
+
+        expect(result.current.projects).toEqual([]);
+        expect(store.get("project", sub.id)).toBeNull();
+        expect(store.get("task", "t1").projectId).toBe("inbox");
     });
 });

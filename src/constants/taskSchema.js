@@ -10,6 +10,7 @@
 // =============================================================
 
 import { generateId } from "../utils/id";
+import { localDateISO } from "../data/mappers";
 
 // ── Constantes de prioridade ─────────────────────────────────────
 
@@ -59,15 +60,6 @@ export const PRIORITY_META = Object.freeze([
     },
 ]);
 
-// ── Constantes de status de sync ─────────────────────────────────
-
-export const SYNC_STATUS = Object.freeze({
-    PENDING: "pending",
-    SYNCED: "synced",
-    OFFLINE: "offline",
-    ERROR: "error",
-});
-
 // ── Projeto padrão ───────────────────────────────────────────────
 
 export const DEFAULT_PROJECT = Object.freeze({
@@ -87,7 +79,7 @@ export const DEFAULT_PROJECT = Object.freeze({
  */
 export function createTask(overrides = {}) {
     const now = new Date().toISOString();
-    const today = now.split("T")[0];
+    const today = localDateISO();
 
     return {
         // ── Identificação ──
@@ -119,10 +111,6 @@ export function createTask(overrides = {}) {
 
         // ── Subtarefas ──
         subtasks: [],             // [{ title: string, completed: boolean }]
-
-        // ── Sincronização ──
-        syncStatus: SYNC_STATUS.PENDING,
-        gcalEventId: null,        // string ou null
 
         // ── Metadados ──
         createdAt: now,

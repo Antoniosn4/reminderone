@@ -66,6 +66,6 @@
         },
         "category": "Productivity",
         "shortDescription": "Assistente local de produtividade",
-        "longDescription": "Reminder1 é um app desktop 100% local: vault cifrado AES-GCM, NLP via Gemini com proxy local e integração opcional com o Google Calendar."
+        "longDescription": "Reminder1 é um app desktop com vault cifrado AES-GCM, NLP via Gemini com proxy local e calendário próprio para organizar tarefas."
     }
 }

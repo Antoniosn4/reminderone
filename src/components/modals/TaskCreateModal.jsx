@@ -15,6 +15,7 @@ import {
     FolderOpen, Plus,
 } from "lucide-react";
 import { PRIORITY_META, DEFAULT_PROJECT, PRIORITY_LEVELS } from "../../constants/taskSchema";
+import { localDateISO } from "../../data/mappers";
 
 /**
  * @param {{
@@ -26,7 +27,7 @@ import { PRIORITY_META, DEFAULT_PROJECT, PRIORITY_LEVELS } from "../../constants
  * }} props
  */
 export function TaskCreateModal({ isOpen, onClose, onSave, projects = [], onCreateNewProject }) {
-    const today = new Date().toISOString().split("T")[0];
+    const today = localDateISO();
 
     const initialState = {
         title: "",
@@ -48,7 +49,7 @@ export function TaskCreateModal({ isOpen, onClose, onSave, projects = [], onCrea
     // Reset form when opened
     useEffect(() => {
         if (isOpen) {
-            setFormData({ ...initialState, date: new Date().toISOString().split("T")[0] });
+            setFormData({ ...initialState, date: localDateISO() });
             setTagInput("");
         }
     }, [isOpen]);
@@ -60,8 +61,6 @@ export function TaskCreateModal({ isOpen, onClose, onSave, projects = [], onCrea
         window.addEventListener("keydown", handleKey);
         return () => window.removeEventListener("keydown", handleKey);
     }, [isOpen, onClose]);
-
-    if (!isOpen) return null;
 
     const handleChange = (field, value) =>
         setFormData((prev) => ({ ...prev, [field]: value }));
@@ -108,6 +107,9 @@ export function TaskCreateModal({ isOpen, onClose, onSave, projects = [], onCrea
     // ── Subprojects ──
     const selectedProject = projects.find((p) => p.label === formData.project);
     const subProjects = selectedProject?.subProjects || [];
+
+    // Depois de todos os hooks: retornar antes deles muda a contagem entre renders.
+    if (!isOpen) return null;
 
     return (
         <div

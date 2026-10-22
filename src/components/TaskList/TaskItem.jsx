@@ -15,8 +15,6 @@ import {
     Pencil,
     Check,
     X,
-    RefreshCw,
-    CalendarCheck,
     ArrowDown,
     Minus,
     ArrowUp,
@@ -26,6 +24,7 @@ import {
 } from "lucide-react";
 import { SubtaskList } from "./SubtaskList";
 import { Avatar } from "../Avatar";
+import { localDateISO } from "../../data/mappers";
 
 const ASSIGNEE_AVATAR_SIZE_PX = 14;
 
@@ -66,7 +65,6 @@ export function TaskItem({
     const titleInputRef = useRef(null);
 
     const hasSubtasks = task.subtasks?.length > 0;
-    const isSyncing = task.syncStatus === "pending";
 
     // ----- Handlers de subtarefas -----
 
@@ -194,7 +192,7 @@ export function TaskItem({
                                 >
                                     {task.time}
                                 </span>
-                                {task.date && task.date !== new Date().toISOString().split("T")[0] && (
+                                {task.date && task.date !== localDateISO() && (
                                     <span
                                         className={`text-[11px] font-medium px-2 py-0.5 rounded-md bg-gray-900 border transition-colors duration-300
                                             ${task.completed ? "border-gray-800 text-gray-600" : "border-sky-500/20 text-sky-400"}`}
@@ -235,7 +233,7 @@ export function TaskItem({
                                         </span>
                                     );
                                 })()}
-                                {task.estimatedDuration && !task.completed && (
+                                {task.estimatedDuration > 0 && !task.completed && (
                                     <span className="flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-md border border-gray-700 text-gray-400 bg-gray-900">
                                         <Timer className="w-3 h-3" />
                                         {task.estimatedDuration}min
@@ -341,13 +339,6 @@ export function TaskItem({
                         </div>
                     )}
 
-                    <div title={isSyncing ? "Sincronizando..." : "Sincronizado"}>
-                        {isSyncing ? (
-                            <RefreshCw className={`w-4 h-4 animate-spin ${task.completed ? "text-gray-600" : "text-gray-500"}`} />
-                        ) : (
-                            <CalendarCheck className={`w-4 h-4 transition-colors duration-300 ${task.completed ? "text-gray-600" : "text-gray-500"}`} />
-                        )}
-                    </div>
                 </div>
             </div>
 

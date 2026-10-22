@@ -6,6 +6,7 @@
 
 import { useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { localDateISO } from "../../data/mappers";
 
 const DAYS_OF_WEEK = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 const MONTH_NAMES = [
@@ -25,7 +26,7 @@ export function CalendarView({ tasks, onDayClick }) {
     const [viewYear, setViewYear] = useState(now.getFullYear());
     const [viewMonth, setViewMonth] = useState(now.getMonth()); // 0-indexed
 
-    const todayISO = now.toISOString().split("T")[0];
+    const todayISO = localDateISO(now);
 
     // Primeiro dia do mês (0=Dom, 1=Seg, ...)
     const firstDayOfWeek = new Date(viewYear, viewMonth, 1).getDay();

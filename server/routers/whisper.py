@@ -82,7 +82,7 @@ def _resolve_device() -> tuple[str, str]:
             import torch
             if torch.cuda.is_available():
                 gpu_name = torch.cuda.get_device_name(0)
-                vram_mb = torch.cuda.get_device_properties(0).total_mem // (1024 * 1024)
+                vram_mb = torch.cuda.get_device_properties(0).total_memory // (1024 * 1024)
                 logger.info(
                     "[Whisper] GPU detectada: %s (%d MB VRAM) — usando CUDA float16",
                     gpu_name, vram_mb,
@@ -133,12 +133,26 @@ def _get_model() -> "WhisperModel":
             WHISPER_MODEL_SIZE, device, compute_type,
         )
 
-        _model = WhisperModel(
-            model_size_or_path=WHISPER_MODEL_SIZE,
-            device=device,
-            compute_type=compute_type,
-            cpu_threads=os.cpu_count() or 4,
-        )
+        try:
+            _model = WhisperModel(
+                model_size_or_path=WHISPER_MODEL_SIZE,
+                device=device,
+                compute_type=compute_type,
+                cpu_threads=os.cpu_count() or 4,
+            )
+        except Exception as exc:
+            if device == "cpu":
+                raise
+            # Ex.: CUDA visível pelo torch, mas sem as DLLs que o CTranslate2 usa.
+            logger.warning("[Whisper] Falha ao carregar na GPU: %s — usando CPU", exc)
+            device, compute_type = "cpu", "int8"
+            _model_device = device
+            _model = WhisperModel(
+                model_size_or_path=WHISPER_MODEL_SIZE,
+                device=device,
+                compute_type=compute_type,
+                cpu_threads=os.cpu_count() or 4,
+            )
 
         elapsed = time.perf_counter() - t0
         logger.info("[Whisper] Modelo carregado em %.1fs", elapsed)

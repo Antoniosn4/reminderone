@@ -1,67 +1,62 @@
 // =============================================================
 //  useRoutines.js
-//  Custom Hook — CRUD de rotinas inteligentes.
-//  Persistência via localStorage criptografado.
+//  Custom Hook — CRUD de rotinas inteligentes, sobre o
+//  armazenamento de registros (sincronizado com o celular).
 // =============================================================
 
-import { useCallback } from "react";
-import { usePersistedState } from "./usePersistedState";
+import { useCallback, useMemo } from "react";
+import { useCollection, useData } from "../data/DataContext";
+import { localDateISO, routineToDesktop, toggleRoutineDate } from "../data/mappers";
 import { generateId } from "../utils/id";
 
-const STORAGE_KEY = "reminder-routines-encrypted";
 const DEFAULT_TIME = "08:00";
 const DEFAULT_ICON = "CheckCircle2";
 const DEFAULT_COLOR = "text-indigo-400";
 
-const DEFAULT_ROUTINES = [];
-
 export function useRoutines() {
-    const [routines, setRoutines] = usePersistedState(STORAGE_KEY, DEFAULT_ROUTINES);
+    const { store } = useData();
+    const records = useCollection("routine");
+    const routines = useMemo(
+        () => records.map(routineToDesktop).sort((a, b) => a.time.localeCompare(b.time) || a.label.localeCompare(b.label)),
+        [records],
+    );
 
     const addRoutine = useCallback((routine) => {
         if (!routine?.label?.trim()) return;
-        setRoutines((prev) => [
-            ...prev,
-            {
-                id: `routine_${generateId()}`,
-                label: routine.label.trim(),
-                time: routine.time || DEFAULT_TIME,
-                icon: routine.icon || DEFAULT_ICON,
-                color: routine.color || DEFAULT_COLOR,
-                streak: 0,
-                aiAdjusted: false,
-            },
-        ]);
-    }, [setRoutines]);
+        store.write("routine", `routine_${generateId()}`, {
+            label: routine.label.trim(),
+            time: routine.time || DEFAULT_TIME,
+            icon: routine.icon || DEFAULT_ICON,
+            color: routine.color || DEFAULT_COLOR,
+            streak: 0,
+            aiAdjusted: false,
+            completedDates: [],
+            createdAt: new Date().toISOString(),
+        });
+    }, [store]);
 
     const updateRoutine = useCallback((id, updates) => {
-        setRoutines((prev) =>
-            prev.map((r) => (r.id === id ? { ...r, ...updates } : r))
-        );
-    }, [setRoutines]);
+        if (!store.get("routine", id)) return;
+        const changes = {};
+        for (const field of ["label", "time", "icon", "color"]) {
+            if (updates[field] !== undefined) changes[field] = updates[field];
+        }
+        store.write("routine", id, changes);
+    }, [store]);
 
     const deleteRoutine = useCallback((id) => {
-        setRoutines((prev) => prev.filter((r) => r.id !== id));
-    }, [setRoutines]);
+        store.remove("routine", id);
+    }, [store]);
 
     /**
-     * Toggle do "feito hoje". Persiste apenas as últimas 14 datas distintas
-     * em `completedDates` para alimentar o histórico semanal.
+     * Toggle do "feito hoje" (dia no fuso do computador). Guarda as últimas
+     * 14 datas em `completedDates`, como o celular.
      */
     const toggleRoutineToday = useCallback((id) => {
-        const todayISO = new Date().toISOString().split("T")[0];
-        setRoutines((prev) =>
-            prev.map((routine) => {
-                if (routine.id !== id) return routine;
-                const previousDates = routine.completedDates ?? [];
-                const isDone = previousDates.includes(todayISO);
-                const nextDates = isDone
-                    ? previousDates.filter((d) => d !== todayISO)
-                    : [todayISO, ...previousDates].slice(0, 14);
-                return { ...routine, completedDates: nextDates };
-            }),
-        );
-    }, [setRoutines]);
+        const routine = store.get("routine", id);
+        if (!routine) return;
+        store.write("routine", id, { completedDates: toggleRoutineDate(routine.completedDates, localDateISO()) });
+    }, [store]);
 
     return { routines, addRoutine, updateRoutine, deleteRoutine, toggleRoutineToday };
 }

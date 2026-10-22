@@ -46,8 +46,6 @@ export function TaskEditModal({ task, onClose, onSave, onDelete, projects = [], 
         prevProjectsLength.current = projects.length;
     }, [projects]);
 
-    if (!task) return null;
-
     const handleChange = (field, value) =>
         setEditedTask((prev) => ({ ...prev, [field]: value }));
 
@@ -85,6 +83,9 @@ export function TaskEditModal({ task, onClose, onSave, onDelete, projects = [], 
     // ── Subprojects for selected project ──
     const selectedProject = projects.find((p) => p.label === editedTask.project);
     const subProjects = selectedProject?.subProjects || [];
+
+    // Depois de todos os hooks: retornar antes deles muda a contagem entre renders.
+    if (!task) return null;
 
     return (
         <div className="fixed inset-0 bg-black/60 z-[80] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">

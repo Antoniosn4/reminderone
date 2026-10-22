@@ -69,7 +69,7 @@ export function NewProjectModal({ isOpen, onClose, onAddProject }) {
     };
 
     return (
-        <div className="fixed inset-0 bg-black/60 z-[70] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
+        <div className="fixed inset-0 bg-black/60 z-[90] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
             <div
                 className="bg-gray-800 border border-gray-700 rounded-3xl w-full max-w-sm shadow-2xl overflow-hidden shadow-black/50"
                 onClick={(event) => event.stopPropagation()}
@@ -212,7 +212,7 @@ export function EditProjectModal({
     };
 
     return (
-        <div className="fixed inset-0 bg-black/60 z-[70] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
+        <div className="fixed inset-0 bg-black/60 z-[90] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
             <div
                 className="bg-gray-800 border border-gray-700 rounded-3xl w-full max-w-md shadow-2xl overflow-hidden shadow-black/50"
                 onClick={(event) => event.stopPropagation()}

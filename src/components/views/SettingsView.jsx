@@ -9,7 +9,9 @@ import { useState, useEffect, useCallback } from "react";
 import { User, Save, Check, Timer, Palette, Key, Eye, EyeOff, ExternalLink } from "lucide-react";
 import { useVault, LOCK_TIMEOUT_OPTIONS } from "../vault/VaultContext";
 import { Avatar } from "../Avatar";
-import { loadGeminiKey, saveGeminiKey } from "../onboarding/OnboardingWizard";
+import { loadGeminiKey, saveGeminiKey } from "../../services/geminiKeyStorage";
+import { useAppContext } from "../../contexts/AppContext";
+import { SyncSection } from "./SyncSection";
 
 const PROFILE_AVATAR_SIZE_PX = 88;
 const SAVED_FEEDBACK_MS = 2000;
@@ -32,7 +34,9 @@ const THEME_OPTIONS = [
 ];
 
 export function SettingsView({ theme, onThemeChange }) {
-    const { key, profile, updateProfile, lockTimeout, setLockTimeout } = useVault();
+    const { key, profile, lockTimeout, setLockTimeout } = useVault();
+    // Salvar o perfil grava também o registro sincronizado ("me").
+    const { saveProfile } = useAppContext();
     const [draft, setDraft] = useState(() => ({ ...EMPTY_PROFILE, ...(profile ?? {}) }));
     const [savedAt, setSavedAt] = useState(null);
     const [emailError, setEmailError] = useState(null);
@@ -62,10 +66,10 @@ export function SettingsView({ theme, onThemeChange }) {
                 return;
             }
 
-            updateProfile({ name: cleanName, email: cleanEmail });
+            saveProfile({ name: cleanName, email: cleanEmail });
             setSavedAt(Date.now());
         },
-        [draft, updateProfile],
+        [draft, saveProfile],
     );
 
     useEffect(() => {
@@ -230,6 +234,7 @@ export function SettingsView({ theme, onThemeChange }) {
                     ))}
                 </div>
             </section>
+            <SyncSection />
             <GeminiKeySection vaultKey={key} />
 
         </div>

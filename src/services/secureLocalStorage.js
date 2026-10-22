@@ -28,6 +28,7 @@ export async function writeEncrypted(key, storageKey, value) {
         localStorage.setItem(storageKey, JSON.stringify(payload));
     } catch (error) {
         logger.error(`[secureLocalStorage] Falha ao gravar ${storageKey}:`, error);
+        throw error;
     }
 }
 

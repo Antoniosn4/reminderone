@@ -8,7 +8,6 @@ import { Toaster } from "react-hot-toast";
 import { useAppContext } from "../contexts/AppContext";
 
 // Modals
-import { WeeklyReportModal } from "./WeeklyReportModal";
 import { SearchModal } from "./SearchModal";
 import { QuickAddModal } from "./QuickAddModal";
 import { SmartInput } from "./SmartInput";
@@ -20,7 +19,6 @@ import { NewProjectModal, EditProjectModal } from "./modals/ProjectModals";
 import { NewRoutineModal, EditRoutineModal } from "./modals/RoutineModals";
 import { CalendarDayModal } from "./modals/CalendarDayModal";
 import { NoteModal } from "./modals/NoteModal";
-import { OnboardingWizard } from "./onboarding/OnboardingWizard";
 
 export function AppModals() {
     const ctx = useAppContext();
@@ -46,7 +44,6 @@ export function AppModals() {
             </QuickAddModal>
 
             <SearchModal isOpen={ctx.isSearchOpen} onClose={() => ctx.setIsSearchOpen(false)} tasks={ctx.tasks} onNavigate={ctx.navigate} />
-            <WeeklyReportModal isOpen={ctx.showWeeklyReport} onClose={() => ctx.setShowWeeklyReport(false)} tasks={ctx.tasks} />
 
             {/* Task Edit */}
             <TaskEditModal
@@ -135,10 +132,6 @@ export function AppModals() {
                 }}
             />
 
-            {/* Onboarding wizard — first-time setup only */}
-            {ctx.showOnboarding && (
-                <OnboardingWizard onComplete={() => ctx.setShowOnboarding(false)} />
-            )}
         </>
     );
 }

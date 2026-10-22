@@ -2,20 +2,21 @@
 //  useVoiceRecording.js
 //  Gravação e transcrição de voz com duas estratégias:
 //
-//  1. Web Speech API (primária) — nativa do Chromium/WebView2.
-//     Zero-config, gratuita, sem modelo para baixar, real-time.
-//     Funciona em Tauri WebView2 com internet.
+//  1. Faster-Whisper local (primária) — o áudio vai só para o
+//     servidor deste computador (a sidecar), sem nuvem, como pede
+//     a proposta local-first. O mesmo Whisper atende o celular.
 //
-//  2. Faster-Whisper local (fallback) — se Web Speech API
-//     não estiver disponível no runtime atual.
+//  2. Web Speech API (fallback) — só quando o runtime não consegue
+//     gravar áudio. Ela manda o áudio para o serviço online do
+//     navegador.
 //
-//  Fluxo Web Speech API:
+//  Fluxo Whisper:
+//    clica mic → MediaRecorder grava → clica ✔️ → blob → sidecar → texto
+//
+//  Fluxo Web Speech API (fallback):
 //    clica mic → reconhecimento em tempo real → texto aparece live
 //    clica ✔️ → recognition.stop() → commit do resultado final
 //    clica ❌ → recognition.abort() → descarta tudo
-//
-//  Fluxo Whisper (fallback):
-//    clica mic → MediaRecorder grava → clica ✔️ → blob → sidecar → texto
 // =============================================================
 
 import { useState, useRef, useCallback, useEffect } from "react";
@@ -23,11 +24,25 @@ import toast from "react-hot-toast";
 import { transcribeAudio } from "../services/whisperService";
 import { logger } from "../utils/logger";
 
-// Detecta Web Speech API no runtime atual (Chromium/WebView2)
+/**
+ * Qual estratégia de voz o runtime permite: "whisper" se dá para gravar
+ * áudio, senão "speech" se houver Web Speech API, senão null (sem voz).
+ */
+export function detectVoiceStrategy(win = typeof window !== "undefined" ? window : undefined) {
+    if (!win) return null;
+    const canRecord =
+        typeof win.navigator?.mediaDevices?.getUserMedia === "function" &&
+        typeof win.MediaRecorder !== "undefined";
+    if (canRecord) return "whisper";
+    if (win.SpeechRecognition || win.webkitSpeechRecognition) return "speech";
+    return null;
+}
+
+/** Estratégia do runtime atual; o SmartInput usa a mesma para os rótulos. */
+export const VOICE_STRATEGY = detectVoiceStrategy();
+
 const SpeechRecognitionAPI =
-    typeof window !== "undefined"
-        ? (window.SpeechRecognition || window.webkitSpeechRecognition)
-        : null;
+    VOICE_STRATEGY === "speech" ? (window.SpeechRecognition || window.webkitSpeechRecognition) : null;
 
 export function useVoiceRecording(setInputValue, onTranscribed) {
     const [isRecording, setIsRecording] = useState(false);
@@ -65,7 +80,7 @@ export function useVoiceRecording(setInputValue, onTranscribed) {
     }, []);
 
     // =========================================================================
-    // ESTRATÉGIA 1: Web Speech API
+    // ESTRATÉGIA 2 (fallback): Web Speech API
     // =========================================================================
 
     const _startSpeechRecognition = useCallback(async () => {
@@ -167,7 +182,7 @@ export function useVoiceRecording(setInputValue, onTranscribed) {
     }, [setInputValue]);
 
     // =========================================================================
-    // ESTRATÉGIA 2: Whisper local (fallback)
+    // ESTRATÉGIA 1: Whisper local
     // =========================================================================
 
     const _stopAndTranscribeWhisper = useCallback(async () => {
@@ -202,6 +217,8 @@ export function useVoiceRecording(setInputValue, onTranscribed) {
         if (text.trim()) {
             setInputValue(text);
             onTranscribedRef.current?.(text);
+        } else {
+            toast.error("Não deu para entender o áudio. Fale mais perto do microfone e tente de novo.");
         }
     }, [setInputValue]);
 
@@ -247,8 +264,11 @@ export function useVoiceRecording(setInputValue, onTranscribed) {
     // =========================================================================
 
     const toggleRecording = useCallback(() => {
+        if (!VOICE_STRATEGY) return;
+        const useSpeech = VOICE_STRATEGY === "speech";
+
         if (isRecording) {
-            if (SpeechRecognitionAPI) {
+            if (useSpeech) {
                 _stopSpeechRecognition();
             } else {
                 _stopAndTranscribeWhisper();
@@ -256,7 +276,7 @@ export function useVoiceRecording(setInputValue, onTranscribed) {
             return;
         }
 
-        if (SpeechRecognitionAPI) {
+        if (useSpeech) {
             _startSpeechRecognition();
         } else {
             _startWhisperRecording();
@@ -268,7 +288,7 @@ export function useVoiceRecording(setInputValue, onTranscribed) {
     ]);
 
     const cancelRecording = useCallback(() => {
-        if (SpeechRecognitionAPI && isRecording) {
+        if (VOICE_STRATEGY === "speech" && isRecording) {
             _cancelSpeechRecognition();
         } else {
             _cancelWhisperRecording();

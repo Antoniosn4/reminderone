@@ -1,28 +1,23 @@
 // =============================================================
 //  useTasks.js
 //  Custom Hook — gerenciamento de estado e lógica das tarefas.
-//  CRUD com persistência incremental no IndexedDB cifrado e
-//  enriquecimento via Gemini com fallback obrigatório.
+//  CRUD sobre o armazenamento de registros (sincronizado com o
+//  celular) e enriquecimento via Gemini com fallback obrigatório.
 //
-//  Usa o schema canônico de `taskSchema.js` para garantir que
-//  todas as tarefas criadas/carregadas tenham o conjunto completo
-//  de campos, tanto no desktop quanto no mobile.
+//  As telas continuam recebendo o formato do desktop (rótulo de
+//  projeto, "Sem horário", prioridade "normal"); a conversão para o
+//  protocolo fica em data/mappers.js.
 // =============================================================
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import toast from "react-hot-toast";
 import { callGemini } from "../services/geminiService";
-import {
-    getAllTasks,
-    putTask,
-    deleteTaskById,
-} from "../services/secureStorage";
-import { syncTask, deleteCalendarEvent } from "../services/calendarService";
 import { logger } from "../utils/logger";
-import { useVault } from "../components/vault/VaultContext";
+import { useCollection, useData } from "../data/DataContext";
+import { desktopTaskChanges, localDateISO, taskToDesktop } from "../data/mappers";
+import { ensureProjectId } from "./useProjects";
 import {
     createTask,
-    normalizeTask,
     DEFAULT_PROJECT,
     PRIORITY_LEVELS,
 } from "../constants/taskSchema";
@@ -75,7 +70,7 @@ function buildFallbackTask(cleanText) {
     return {
         title: cleanText,
         description: "",
-        date: new Date().toISOString().split("T")[0],
+        date: localDateISO(),
         time: "Sem horário",
         project: DEFAULT_PROJECT.label,
         projectColor: DEFAULT_PROJECT.color,
@@ -86,7 +81,7 @@ function buildFallbackTask(cleanText) {
 }
 
 function buildPrompt(cleanText, projectNames) {
-    const today = new Date().toISOString().split("T")[0];
+    const today = localDateISO();
     const dayOfWeek = new Date().toLocaleDateString("pt-BR", { weekday: "long" });
     const projectList = projectNames.length > 0 ? projectNames.join(", ") : DEFAULT_PROJECT.label;
 
@@ -112,107 +107,71 @@ Entrada do usuário: "${cleanText}"`;
 // ----- Hook -----
 
 export function useTasks() {
-    const { key } = useVault();
-    const [tasks, setTasks] = useState([]);
+    const { store } = useData();
+    const taskRecords = useCollection("task");
+    const projectRecords = useCollection("project");
     const [isAnalyzing, setIsAnalyzing] = useState(false);
-    const tasksRef = useRef(tasks);
 
-    useEffect(() => { tasksRef.current = tasks; }, [tasks]);
+    // As mais novas primeiro, como a lista do desktop sempre mostrou.
+    const tasks = useMemo(() => {
+        const projectsById = new Map(projectRecords.map((project) => [project.id, project]));
+        return taskRecords
+            .map((record) => taskToDesktop(record, projectsById))
+            .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+    }, [taskRecords, projectRecords]);
 
-    // Hidrata a partir do IndexedDB cifrado quando a chave fica disponível.
-    // Normaliza cada tarefa para garantir que campos novos existam.
-    useEffect(() => {
-        if (!key) {
-            setTasks([]);
-            return;
-        }
-        let cancelled = false;
-        getAllTasks(key).then((loaded) => {
-            if (!cancelled) {
-                // Normaliza tarefas legadas para o schema atual
-                setTasks(loaded.map(normalizeTask));
-            }
+    const resolveProjectId = useCallback(
+        (label, subLabel, color) => ensureProjectId(store, label, subLabel, color),
+        [store],
+    );
+
+    /** Grava uma tarefa nova (formato do desktop) como registro. */
+    const insertTask = useCallback((desktopTask, origin = "manual") => {
+        let created = null;
+        store.batch(() => {
+            const fields = desktopTaskChanges(desktopTask, { resolveProjectId, current: null });
+            store.write("task", String(desktopTask.id), {
+                ...fields,
+                origin,
+                createdAt: desktopTask.createdAt || new Date().toISOString(),
+            });
+            created = desktopTask;
         });
-        return () => { cancelled = true; };
-    }, [key]);
+        return created;
+    }, [store, resolveProjectId]);
 
     // ── Operações ──────────────────────────────────────────────────────────
 
     const updateTask = useCallback((id, updates) => {
-        if (!key) return;
-        setTasks((prev) => {
-            const next = prev.map((t) => (t.id === id
-                ? { ...t, ...updates, updatedAt: new Date().toISOString() }
-                : t
-            ));
-            const updated = next.find((t) => t.id === id);
-            if (updated) putTask(key, updated);
-            return next;
+        const current = store.get("task", id);
+        if (!current) return;
+        store.batch(() => {
+            store.write("task", id, desktopTaskChanges(updates, { resolveProjectId, current }));
         });
-    }, [key]);
+    }, [store, resolveProjectId]);
 
     const toggleTask = useCallback((id) => {
-        if (!key) return;
-        setTasks((prev) => {
-            const now = new Date().toISOString();
-            const next = prev.map((t) => {
-                if (t.id !== id) return t;
-                const newCompleted = !t.completed;
-                return {
-                    ...t,
-                    completed: newCompleted,
-                    completedAt: newCompleted ? now : null,
-                    updatedAt: now,
-                };
-            });
-            const updated = next.find((t) => t.id === id);
-            if (updated) putTask(key, updated);
-            return next;
+        const current = store.get("task", id);
+        if (!current) return;
+        const done = current.status !== "done";
+        store.write("task", id, {
+            status: done ? "done" : "todo",
+            completedAt: done ? new Date().toISOString() : null,
         });
-    }, [key]);
+    }, [store]);
 
     const deleteTask = useCallback((id) => {
-        const target = tasksRef.current.find((t) => t.id === id);
-        if (target?.gcalEventId) {
-            deleteCalendarEvent(target.gcalEventId);
-        }
-        deleteTaskById(id);
-        setTasks((prev) => prev.filter((t) => t.id !== id));
-    }, []);
-
-    const updateTaskAndSync = useCallback((id, updates) => {
-        if (!key) return;
-        setTasks((prev) => {
-            const now = new Date().toISOString();
-            const next = prev.map((t) => (t.id === id
-                ? { ...t, ...updates, updatedAt: now }
-                : t
-            ));
-            const updated = next.find((t) => t.id === id);
-            if (!updated) return next;
-
-            putTask(key, updated);
-            const requiresGcalSync = "title" in updates || "time" in updates || "date" in updates;
-            if (requiresGcalSync) {
-                syncTask(updated).then((eventId) => {
-                    if (!eventId || eventId === updated.gcalEventId) return;
-                    updateTask(id, { gcalEventId: eventId, syncStatus: "synced" });
-                });
-            }
-            return next;
-        });
-    }, [key, updateTask]);
+        store.remove("task", id);
+    }, [store]);
 
     /**
      * Interpreta o texto via Gemini e adiciona a nova tarefa.
      * Garante que a tarefa nunca é perdida — fallback obrigatório
      * se a IA falhar.
-     *
-     * Usa createTask() do schema para garantir todos os campos.
      */
     const addTaskFromText = useCallback(
         async (rawText, assignee = null, projectNames = []) => {
-            if (!rawText.trim() || !key) return;
+            if (!rawText.trim()) return;
 
             setIsAnalyzing(true);
             const cleanText = rawText.replace(/@\w+/g, "").trim();
@@ -240,52 +199,21 @@ export function useTasks() {
                 setIsAnalyzing(false);
             }
 
-            // Usa createTask() para garantir todos os campos do schema
-            const newTask = createTask({
-                ...taskData,
-                assignee,
-            });
-
-            await putTask(key, newTask);
-            setTasks((prev) => [newTask, ...prev]);
-
-        syncTask(newTask).then((eventId) => {
-            updateTask(newTask.id, {
-                syncStatus: eventId ? "synced" : "offline",
-                gcalEventId: eventId ?? null,
-            });
-        });
+            insertTask(createTask({ ...taskData, assignee }));
         },
-        [key, updateTask],
+        [insertTask],
     );
 
     /**
      * Cria uma tarefa manualmente com dados fornecidos pelo formulário.
-     * Usado pelo modal "Criar Tarefa" e futuramente pelo mobile.
+     * Usado pelo modal "Criar Tarefa".
      *
      * @param {Partial<Task>} taskFields — campos da tarefa
      * @returns {Promise<Task>} — a tarefa criada
      */
     const addTaskManual = useCallback(
-        async (taskFields) => {
-            if (!key) return null;
-
-            const newTask = createTask(taskFields);
-
-            await putTask(key, newTask);
-            setTasks((prev) => [newTask, ...prev]);
-
-            // Sync com Google Calendar se tiver data/hora
-            syncTask(newTask).then((eventId) => {
-                updateTask(newTask.id, {
-                    syncStatus: eventId ? "synced" : "offline",
-                    gcalEventId: eventId ?? null,
-                });
-            });
-
-            return newTask;
-        },
-        [key, updateTask],
+        async (taskFields) => insertTask(createTask(taskFields)),
+        [insertTask],
     );
 
     const generateSubtasks = useCallback(async (taskId, taskTitle) => {
@@ -295,55 +223,14 @@ export function useTasks() {
         return subtasks;
     }, [updateTask]);
 
-    /**
-     * Re-sincroniza com o Google Calendar todas as tarefas que estão `offline`
-     * ou `pending` (futuras + sem horário definido continuam pulando o sync).
-     * Retorna { synced, failed } para feedback no UI.
-     */
-    const resyncWithCalendar = useCallback(async () => {
-        if (!key) return { synced: 0, failed: 0 };
-
-        const pending = tasksRef.current.filter(
-            (t) => !t.completed && (t.syncStatus === "offline" || t.syncStatus === "pending"),
-        );
-
-        let synced = 0;
-        let failed = 0;
-        for (const task of pending) {
-            try {
-                const eventId = await syncTask(task);
-                if (eventId) {
-                    updateTask(task.id, {
-                        gcalEventId: eventId,
-                        syncStatus: "synced",
-                    });
-                    synced += 1;
-                } else {
-                    failed += 1;
-                }
-            } catch (err) {
-                logger.error("[useTasks.resync] Falha ao sincronizar:", err);
-                failed += 1;
-            }
-        }
-        return { synced, failed };
-    }, [key, updateTask]);
-
     const toggleSubtask = useCallback((taskId, subtaskIndex) => {
-        if (!key) return;
-        setTasks((prev) => {
-            const next = prev.map((task) => {
-                if (task.id !== taskId) return task;
-                const updatedSubtasks = task.subtasks.map((sub, i) =>
-                    i === subtaskIndex ? { ...sub, completed: !sub.completed } : sub,
-                );
-                return { ...task, subtasks: updatedSubtasks, updatedAt: new Date().toISOString() };
-            });
-            const updated = next.find((t) => t.id === taskId);
-            if (updated) putTask(key, updated);
-            return next;
-        });
-    }, [key]);
+        const current = store.get("task", taskId);
+        if (!current) return;
+        const subtasks = (Array.isArray(current.subtasks) ? current.subtasks : []).map((sub, i) =>
+            i === subtaskIndex ? { ...sub, completed: !sub.completed } : sub,
+        );
+        store.write("task", taskId, { subtasks });
+    }, [store]);
 
     return {
         tasks,
@@ -351,10 +238,9 @@ export function useTasks() {
         addTaskFromText,
         addTaskManual,
         toggleTask,
-        updateTask: updateTaskAndSync,
+        updateTask,
         deleteTask,
         generateSubtasks,
         toggleSubtask,
-        resyncWithCalendar,
     };
 }

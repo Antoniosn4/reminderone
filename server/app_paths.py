@@ -60,28 +60,6 @@ def env_file_candidates() -> list[Path]:
     return _dedupe(candidates)
 
 
-def google_credentials_file() -> Path:
-    explicit = os.getenv("REMINDER_GOOGLE_CREDENTIALS")
-    if explicit:
-        return Path(explicit).expanduser()
-
-    app_data_candidate = app_data_file("credentials.json")
-    if os.getenv("REMINDER_DATA_DIR"):
-        return app_data_candidate
-
-    candidates: list[Path] = []
-    candidates.extend([
-        app_data_candidate,
-        resource_dir() / "credentials.json",
-        server_dir() / "credentials.json",
-    ])
-
-    for candidate in _dedupe(candidates):
-        if candidate.exists():
-            return candidate
-    return app_data_candidate
-
-
 def _dedupe(paths: list[Path]) -> list[Path]:
     seen: set[str] = set()
     result: list[Path] = []
