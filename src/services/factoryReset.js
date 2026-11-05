@@ -17,6 +17,7 @@
 import { destroyVault } from "./vaultService";
 import { clearProfile } from "./profileService";
 import { logger } from "../utils/logger";
+import { localStorageFlushed, MIRROR_DB_NAME } from "./durableLocalStorage";
 
 const LOCAL_STORAGE_KEYS = [
     "reminder-custom-projects-encrypted",
@@ -35,7 +36,7 @@ const LOCAL_STORAGE_KEYS = [
     "reminder-routines",
 ];
 
-const INDEXED_DB_NAMES = ["reminder-db", "reminder-data"];
+const INDEXED_DB_NAMES = ["reminder-db", "reminder-data", MIRROR_DB_NAME];
 
 function deleteIndexedDb(dbName) {
     return new Promise((resolve) => {
@@ -58,5 +59,6 @@ export async function factoryReset() {
     destroyVault();
     clearProfile();
     LOCAL_STORAGE_KEYS.forEach((key) => localStorage.removeItem(key));
+    await localStorageFlushed();
     await Promise.all(INDEXED_DB_NAMES.map(deleteIndexedDb));
 }

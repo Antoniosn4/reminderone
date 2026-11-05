@@ -3,7 +3,7 @@
 //  Ciclo de vida do vault local: setup, unlock, validação por
 //  canary token e backoff exponencial contra força bruta.
 //
-//  Persistência (em localStorage, não secreto):
+//  Persistência (em localStorage espelhado no IndexedDB, não secreto):
 //    - reminder-vault-meta = { salt, canary, createdAt }
 //    - reminder-vault-attempts = { count, lastFailedAt }
 //
@@ -19,6 +19,7 @@ import {
     decryptObject,
     generateSalt,
 } from "./cryptoService";
+import { localStorageFlushed } from "./durableLocalStorage";
 
 const VAULT_META_KEY = "reminder-vault-meta";
 const ATTEMPTS_KEY = "reminder-vault-attempts";
@@ -102,6 +103,9 @@ export async function setupVault(password) {
         createdAt: Date.now(),
     });
     clearAttempts();
+    // Só libera o cofre com o salt já em disco: sem ele, nada que for
+    // cifrado com esta chave poderá ser aberto depois.
+    await localStorageFlushed();
     return key;
 }
 
