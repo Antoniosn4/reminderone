@@ -7,6 +7,7 @@
 
 import { createContext, useContext, useEffect, useState, useSyncExternalStore } from "react";
 import { useVault } from "../components/vault/VaultContext";
+import { factoryReset } from "../services/factoryReset";
 import { logger } from "../utils/logger";
 import { createDataStore } from "./dataStore";
 import { importLegacyData, legacySources } from "./legacyImport";
@@ -50,16 +51,50 @@ export function DataProvider({ children, createPersistence = createIdbPersistenc
     }, [key, createPersistence]);
 
     if (state.error) {
-        return (
-            <div className="h-screen flex items-center justify-center bg-gray-900 text-gray-300 p-8 text-center">
-                Não foi possível abrir os dados locais. Feche e abra o app de novo.
-            </div>
-        );
+        return <DataOpenError />;
     }
     if (!state.store) {
         return <div className="h-screen bg-gray-900" aria-busy="true" />;
     }
     return <DataContext.Provider value={state}><PersistenceNotice store={state.store} />{children}</DataContext.Provider>;
+}
+
+/**
+ * Os dados locais não abrem com a chave deste PIN (ex.: o cofre foi recriado
+ * e os registros seguem cifrados com a chave antiga). Sem ela não há como
+ * decifrar: a saída é apagar os dados deste aparelho e, se ele estava
+ * pareado, puxá-los de novo do servidor de sincronização.
+ */
+function DataOpenError() {
+    const discard = async () => {
+        if (!window.confirm(
+            "Os dados deste computador foram cifrados com outro PIN e não podem ser abertos.\n\n" +
+            "Apagar os dados locais e começar de novo? O que já estiver no servidor de " +
+            "sincronização volta quando você parear de novo.",
+        )) return;
+        try {
+            await factoryReset();
+        } catch (error) {
+            logger.error("[data] falha ao apagar os dados locais:", error);
+        } finally {
+            window.location.reload();
+        }
+    };
+    return (
+        <div className="h-screen flex flex-col items-center justify-center gap-4 bg-gray-900 text-gray-300 p-8 text-center">
+            <p>Não foi possível abrir os dados locais com este PIN.</p>
+            <p className="text-sm text-gray-500 max-w-md">
+                Se você acabou de criar o PIN, os dados salvos antes foram cifrados com um PIN anterior.
+                Feche e abra o app de novo; se continuar, apague os dados locais para recomeçar.
+            </p>
+            <button
+                onClick={() => void discard()}
+                className="px-4 py-2 rounded-xl bg-red-600/80 hover:bg-red-600 text-white text-sm"
+            >
+                Apagar dados locais e recomeçar
+            </button>
+        </div>
+    );
 }
 
 function PersistenceNotice({ store }) {
